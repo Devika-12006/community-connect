@@ -7,8 +7,20 @@ import {
   type ComplaintCategory,
   type Complaint,
   type ImageAsset,
+  type ImageQualityReport,
 } from '../../types';
 import { suggestCategory, checkPossibleDuplicate, type DuplicateWarning } from '../../lib/smartAssistance';
+import {
+  validateImageBytes,
+  inspectImageWithCanvas,
+  computeContentHash,
+  checkImageDuplicates,
+  classifyImageWithVisionModel,
+  compareSelectedWithVisualCategory,
+  buildSuspiciousFlags,
+  type ReusedPhotoMatch,
+  type VisualClassificationResult,
+} from '../../lib/imageVerification';
 import {
   MapPin,
   CheckCircle2,
@@ -21,12 +33,18 @@ import {
   Compass,
   AlertCircle,
   Eye,
+  Loader2,
 } from 'lucide-react';
 
 interface UploadedImageFile {
   id: string;
   file: File;
   previewUrl: string;
+  quality?: ImageQualityReport;
+  dHash?: string;
+  contentHash?: string;
+  reusedMatch?: ReusedPhotoMatch | null;
+  isValidating?: boolean;
 }
 
 export const ReportIssuePage: React.FC = () => {
@@ -43,6 +61,9 @@ export const ReportIssuePage: React.FC = () => {
   const [description, setDescription] = useState('');
   const [images, setImages] = useState<UploadedImageFile[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [visualResult, setVisualResult] = useState<VisualClassificationResult | null>(null);
+  const [visualDismissed, setVisualDismissed] = useState(false);
 
   // Location state
   const [block, setBlock] = useState(activeResident?.block || settings.blocks[0] || 'Block A');
@@ -98,40 +119,87 @@ export const ReportIssuePage: React.FC = () => {
     }
   }, [title, category, block, complaints]);
 
-  // Handle image selection
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle image selection with verification, quality check, and duplicate scanning
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setUploadError(null);
     if (!e.target.files) return;
 
     const files = Array.from(e.target.files);
-    const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSizeBytes = 5 * 1024 * 1024; // 5 MB
-
     if (images.length + files.length > 3) {
       setUploadError('You can upload a maximum of 3 photos.');
       return;
     }
 
+    setIsAnalyzingImage(true);
+    let existingImages: ImageAsset[] = [];
+    try {
+      existingImages = await repository.getAllImages();
+    } catch (err) {
+      console.warn('Failed to load existing images for duplicate check:', err);
+    }
+
     const newUploaded: UploadedImageFile[] = [];
 
     for (const file of files) {
-      if (!validMimes.includes(file.type)) {
-        setUploadError(`"${file.name}" is not supported. Please upload JPG, PNG, or WebP images.`);
+      // 1. Binary header and size validation
+      const byteCheck = await validateImageBytes(file);
+      if (!byteCheck.valid) {
+        setUploadError(`"${file.name}": ${byteCheck.error}`);
+        setIsAnalyzingImage(false);
         return;
       }
-      if (file.size > maxSizeBytes) {
-        setUploadError(`"${file.name}" exceeds the 5 MB limit. Please select a smaller image.`);
-        return;
-      }
+
       const previewUrl = URL.createObjectURL(file);
+      const id = crypto.randomUUID();
+
+      let quality: ImageQualityReport | undefined;
+      let dHash: string | undefined;
+      let contentHash: string | undefined;
+      let reusedMatch: ReusedPhotoMatch | null = null;
+
+      try {
+        // 2. Offscreen Canvas quality analysis & 64-bit dHash
+        const canvasInspection = await inspectImageWithCanvas(file);
+        quality = canvasInspection.quality;
+        dHash = canvasInspection.dHash;
+        contentHash = await computeContentHash(file);
+
+        // 3. Duplicate check across existing complaints
+        reusedMatch = checkImageDuplicates(
+          dHash,
+          contentHash,
+          existingImages,
+          complaints
+        );
+      } catch (inspectErr) {
+        console.warn('Canvas image analysis error:', inspectErr);
+      }
+
       newUploaded.push({
-        id: crypto.randomUUID(),
+        id,
         file,
         previewUrl,
+        quality,
+        dHash,
+        contentHash,
+        reusedMatch,
       });
+
+      // 4. Real Vision Model category classification (if configured)
+      const hasKey = !!(settings.geminiApiKey?.trim() || (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim());
+      if (hasKey && !visualResult) {
+        try {
+          const vResult = await classifyImageWithVisionModel(file, settings.geminiApiKey);
+          setVisualResult(vResult);
+          setVisualDismissed(false);
+        } catch {
+          // Graceful fallback
+        }
+      }
     }
 
     setImages((prev) => [...prev, ...newUploaded]);
+    setIsAnalyzingImage(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -218,8 +286,11 @@ export const ReportIssuePage: React.FC = () => {
     setValidationError(null);
 
     try {
-      // 1. Save uploaded images to IndexedDB
+      // 1. Save uploaded images to IndexedDB with verification attributes
       const imageIds: string[] = [];
+      const qualityReports: ImageQualityReport[] = [];
+      let topReusedMatch: ReusedPhotoMatch | null = null;
+
       for (const img of images) {
         const imageRecord: ImageAsset = {
           id: img.id,
@@ -228,10 +299,31 @@ export const ReportIssuePage: React.FC = () => {
           originalName: img.file.name,
           size: img.file.size,
           createdAt: new Date().toISOString(),
+          perceptualHash: img.dHash,
+          contentHash: img.contentHash,
+          quality: img.quality,
         };
         await repository.saveImage(imageRecord);
         imageIds.push(img.id);
+        if (img.quality) qualityReports.push(img.quality);
+        if (img.reusedMatch && (!topReusedMatch || img.reusedMatch.similarityPercentage > topReusedMatch.similarityPercentage)) {
+          topReusedMatch = img.reusedMatch;
+        }
       }
+
+      // Check category comparison against visual model (if configured)
+      const categoryComparison = visualResult
+        ? compareSelectedWithVisualCategory(category, visualResult)
+        : undefined;
+
+      const suspiciousFlags = buildSuspiciousFlags({
+        reusedMatch: topReusedMatch,
+        qualityReports,
+        categoryComparison,
+      });
+
+      const isSuspicious = suspiciousFlags.length > 0;
+      const imageVerificationStatus = categoryComparison ? categoryComparison.status : 'Unavailable';
 
       // 2. Generate Reference
       const reference = await repository.getNextReference();
@@ -261,6 +353,11 @@ export const ReportIssuePage: React.FC = () => {
         originalImageIds: imageIds,
         requestUrgentAttention: requestUrgent,
         urgentReason: requestUrgent ? urgentReason.trim() : undefined,
+        isSuspicious,
+        suspiciousFlags: isSuspicious ? suspiciousFlags : undefined,
+        imageVerificationStatus,
+        visualCategorySuggested: visualResult?.category,
+        visualExplanation: visualResult?.explanation,
         createdAt: now,
         updatedAt: now,
       };
@@ -494,10 +591,42 @@ export const ReportIssuePage: React.FC = () => {
               </div>
             )}
 
+            {isAnalyzingImage && (
+              <div className="mb-2.5 p-2 rounded-lg bg-teal-50 border border-teal-200 text-xs text-teal-800 font-medium flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                <span>Validating image file headers and inspecting quality...</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               {images.map((img, idx) => (
-                <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group">
+                <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group shadow-2xs">
                   <img src={img.previewUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                  
+                  {/* Quality Pill */}
+                  {img.quality?.status === 'Too Dark' && (
+                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
+                      Dark
+                    </span>
+                  )}
+                  {img.quality?.status === 'Blurry' && (
+                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
+                      Blurry
+                    </span>
+                  )}
+                  {img.quality?.status === 'Clear' && (
+                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-emerald-700 text-white text-[9px] font-bold rounded shadow-xs">
+                      Clear
+                    </span>
+                  )}
+
+                  {/* Duplicate Reused Warning Pill */}
+                  {img.reusedMatch && (
+                    <span className="absolute bottom-6 left-1.5 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded shadow-xs">
+                      Reused
+                    </span>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => handleRemoveImage(img.id)}
@@ -516,7 +645,8 @@ export const ReportIssuePage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-teal-50/30 flex flex-col items-center justify-center p-3 text-slate-500 hover:text-teal-800 transition-all cursor-pointer"
+                  disabled={isAnalyzingImage}
+                  className="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-teal-50/30 flex flex-col items-center justify-center p-3 text-slate-500 hover:text-teal-800 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Upload className="w-6 h-6 mb-1 text-slate-400" />
                   <span className="text-xs font-bold">Add Photo</span>
@@ -534,8 +664,90 @@ export const ReportIssuePage: React.FC = () => {
               className="hidden"
             />
             <p className="text-[11px] text-slate-400 mt-2">
-              Photos are stored directly in your browser&apos;s IndexedDB storage. Max 5 MB per file.
+              Photos are analyzed locally for quality and duplicate reporting before saving to browser IndexedDB. Max 5 MB per file.
             </p>
+
+            {/* Quality Suggestions */}
+            {images.some((img) => img.quality?.isDark || img.quality?.isBlurry) && (
+              <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Photo Quality Tip</span>
+                </div>
+                {images.map((img, idx) => (img.quality?.isDark || img.quality?.isBlurry) && (
+                  <p key={img.id} className="text-[11px] text-amber-800">
+                    • <strong>Photo {idx + 1}:</strong> {img.quality.feedback}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {/* Duplicate Photo Detection Alert */}
+            {images.some((img) => img.reusedMatch) && (
+              <div className="mt-2.5 p-3.5 rounded-xl bg-red-50 border border-red-300 text-xs text-red-900 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-red-800">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>Reused / Duplicate Photograph Detected</span>
+                </div>
+                {images.filter((img) => img.reusedMatch).map((img, idx) => (
+                  <p key={img.id} className="text-[11px] text-red-800">
+                    Photo {idx + 1} matches a photo previously submitted in report{' '}
+                    <strong>{img.reusedMatch?.matchedComplaintReference || 'an existing report'}</strong>{' '}
+                    ({img.reusedMatch?.similarityPercentage}% visual match). Please confirm you are not filing an accidental duplicate report.
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {/* Visual AI Classification & Category Alignment */}
+            {visualResult && !visualDismissed && (
+              <div className={`mt-2.5 p-3.5 rounded-xl border text-xs ${
+                visualResult.category === 'Uncertain'
+                  ? 'bg-slate-50 border-slate-200 text-slate-800'
+                  : visualResult.category === category
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  : 'bg-teal-50 border-teal-300 text-teal-950'
+              }`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 flex-1">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-teal-700 shrink-0" />
+                      <span>Visual Image Verification: {visualResult.category}</span>
+                    </div>
+                    <p className="text-[11px] opacity-90">{visualResult.explanation}</p>
+                    {visualResult.category !== 'Uncertain' && visualResult.category !== category && (
+                      <div className="pt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCategory(visualResult.category as ComplaintCategory);
+                            setVisualDismissed(true);
+                          }}
+                          className="px-3 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold text-[11px] cursor-pointer"
+                        >
+                          Switch to {visualResult.category}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVisualDismissed(true)}
+                          className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-[11px] cursor-pointer"
+                        >
+                          Keep {category}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setVisualDismissed(true)}
+                    className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    aria-label="Dismiss visual check"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Transparent Duplicate Warning Helper */}

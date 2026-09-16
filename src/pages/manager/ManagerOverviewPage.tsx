@@ -10,6 +10,7 @@ import {
   Flame,
   ArrowRight,
   FolderOpen,
+  AlertTriangle,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
@@ -21,6 +22,10 @@ export const ManagerOverviewPage: React.FC = () => {
 
   // Metrics derived strictly from local records
   const totalComplaints = complaints.length;
+
+  const suspiciousComplaints = complaints.filter(
+    (c) => c.isSuspicious && !c.dismissedSuspiciousFlags && c.status !== 'Closed' && c.status !== 'Rejected'
+  );
 
   const unassignedComplaints = complaints.filter(
     (c) =>
@@ -152,6 +157,33 @@ export const ManagerOverviewPage: React.FC = () => {
           <div className="text-[11px] text-slate-400 mt-1">High-priority attention</div>
         </div>
       </div>
+
+      {/* Suspicious Complaints Banner */}
+      {suspiciousComplaints.length > 0 && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-100 rounded-xl text-red-700 shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-red-950">
+                {suspiciousComplaints.length} Complaint{suspiciousComplaints.length > 1 ? 's' : ''} Flagged for Image Verification
+              </h3>
+              <p className="text-xs text-red-800">
+                Reused photographs, dark images, or category mismatches require manager inspection.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/manager/complaints?filter=suspicious"
+            className="px-3.5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 self-end sm:self-auto cursor-pointer"
+          >
+            <span>Inspect Flagged Queue</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* Center Layout: Action Queue + Category Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

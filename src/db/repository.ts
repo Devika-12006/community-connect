@@ -233,6 +233,39 @@ export const repository = {
     }
   },
 
+  async getAllImages(): Promise<ImageAsset[]> {
+    try {
+      const db = await getDatabase();
+      return await db.getAll('images');
+    } catch {
+      return [];
+    }
+  },
+
+  async dismissSuspiciousFlags(complaintId: string, managerName: string, note?: string): Promise<Complaint | null> {
+    const complaint = await this.getComplaint(complaintId);
+    if (!complaint) return null;
+    const now = new Date().toISOString();
+    complaint.dismissedSuspiciousFlags = true;
+    complaint.isSuspicious = false;
+    complaint.updatedAt = now;
+    await this.saveComplaint(complaint);
+
+    await this.addEvent({
+      id: crypto.randomUUID(),
+      complaintId,
+      eventType: 'FlagDismissed',
+      action: 'Suspicious Flag Dismissed',
+      actorRole: 'Manager',
+      actorName: managerName,
+      visibility: 'internal',
+      note: note || 'Community manager reviewed and cleared verification flag.',
+      createdAt: now,
+    });
+
+    return complaint;
+  },
+
   // --- Reset All Data ---
   async resetAllData(): Promise<void> {
     const db = await getDatabase();

@@ -51,6 +51,7 @@ export interface CommunitySettings {
   name: string;
   address: string;
   blocks: string[];
+  geminiApiKey?: string;
   updatedAt: string;
 }
 
@@ -117,10 +118,41 @@ export interface Complaint {
   rating?: number;
   ratingFeedback?: string;
   ratingUpdatedAt?: string;
+  // Verification and Suspicious flags
+  isSuspicious?: boolean;
+  suspiciousFlags?: SuspiciousFlag[];
+  dismissedSuspiciousFlags?: boolean;
+  imageVerificationStatus?: 'Verified' | 'Mismatch' | 'Uncertain' | 'Unavailable';
+  visualCategorySuggested?: ComplaintCategory | 'Uncertain';
+  visualExplanation?: string;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
   closedAt?: string;
+}
+
+export interface ImageQualityReport {
+  brightness: number; // 0-255 average luminance
+  sharpness: number; // edge variance
+  isDark: boolean;
+  isBlurry: boolean;
+  status: 'Clear' | 'Blurry' | 'Too Dark' | 'Low Contrast';
+  feedback?: string;
+}
+
+export type SuspiciousFlagType =
+  | 'REUSED_PHOTO'
+  | 'CATEGORY_MISMATCH'
+  | 'UNUSABLE_IMAGE';
+
+export interface SuspiciousFlag {
+  type: SuspiciousFlagType;
+  severity: 'warning' | 'suspicious';
+  details: string;
+  matchedComplaintId?: string;
+  matchedComplaintReference?: string;
+  matchedImageId?: string;
+  similarityPercentage?: number;
 }
 
 export type ComplaintEventType =
@@ -139,7 +171,9 @@ export type ComplaintEventType =
   | 'InternalNote'
   | 'ResidentUpdate'
   | 'CategoryChanged'
-  | 'PriorityChanged';
+  | 'PriorityChanged'
+  | 'FlagDismissed'
+  | 'ImageVerified';
 
 export interface ComplaintEvent {
   id: string;
@@ -173,4 +207,7 @@ export interface ImageAsset {
   originalName: string;
   size: number;
   createdAt: string;
+  perceptualHash?: string; // 64-bit dHash hex string
+  contentHash?: string; // SHA-256 or digest hex
+  quality?: ImageQualityReport;
 }

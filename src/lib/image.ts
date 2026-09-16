@@ -1,28 +1,21 @@
+import { validateImageBytes } from './imageVerification';
+
 export interface ImageValidationResult {
   valid: boolean;
   error?: string;
 }
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-
 export async function validateImageFile(file: File): Promise<ImageValidationResult> {
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+  // 1. Verify binary magic bytes and file size
+  const byteCheck = await validateImageBytes(file);
+  if (!byteCheck.valid) {
     return {
       valid: false,
-      error: `Invalid file format "${file.type || 'unknown'}". Only JPG, PNG, and WebP are accepted.`,
+      error: byteCheck.error,
     };
   }
 
-  if (file.size > MAX_FILE_SIZE) {
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    return {
-      valid: false,
-      error: `File size (${sizeMb} MB) exceeds the maximum allowed limit of 5 MB.`,
-    };
-  }
-
-  // Verify that the image can be decoded
+  // 2. Verify that the image can be decoded
   try {
     const isValidImage = await new Promise<boolean>((resolve) => {
       const img = new Image();

@@ -10,6 +10,7 @@ import {
   type ComplaintPriority,
   type Complaint,
   type ComplaintEvent,
+  type ImageAsset,
 } from '../../types';
 import { suggestPriority } from '../../lib/smartAssistance';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -27,6 +28,9 @@ import {
   Sparkles,
   MapPin,
   Check,
+  AlertTriangle,
+  AlertCircle,
+  ArrowRight,
 } from 'lucide-react';
 
 export const ManagerComplaintsPage: React.FC = () => {
@@ -39,10 +43,14 @@ export const ManagerComplaintsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [workerFilter, setWorkerFilter] = useState<string>('ALL');
+  const [suspiciousOnly, setSuspiciousOnly] = useState<boolean>(false);
 
   // Selected complaint for review modal
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [complaintEvents, setComplaintEvents] = useState<ComplaintEvent[]>([]);
+  const [selectedComplaintImages, setSelectedComplaintImages] = useState<ImageAsset[]>([]);
+  const [matchedComplaint, setMatchedComplaint] = useState<Complaint | null>(null);
+  const [matchedImage, setMatchedImage] = useState<ImageAsset | null>(null);
 
   // Action states inside modal
   const [newCategory, setNewCategory] = useState<ComplaintCategory>('Garbage');
@@ -72,14 +80,57 @@ export const ManagerComplaintsPage: React.FC = () => {
     setPublicUpdate('');
     const evs = await repository.getEvents(c.id);
     setComplaintEvents(evs);
+
+    // Load original image assets
+    if (c.originalImageIds && c.originalImageIds.length > 0) {
+      const imgs = await repository.getImages(c.originalImageIds);
+      setSelectedComplaintImages(imgs);
+    } else {
+      setSelectedComplaintImages([]);
+    }
+
+    // Check for matched reused image / complaint
+    const reusedFlag = c.suspiciousFlags?.find((f) => f.type === 'REUSED_PHOTO');
+    if (reusedFlag?.matchedComplaintId) {
+      const mc = await repository.getComplaint(reusedFlag.matchedComplaintId);
+      setMatchedComplaint(mc);
+    } else {
+      setMatchedComplaint(null);
+    }
+
+    if (reusedFlag?.matchedImageId) {
+      const mi = await repository.getImage(reusedFlag.matchedImageId);
+      setMatchedImage(mi);
+    } else {
+      setMatchedImage(null);
+    }
+  };
+
+  const handleDismissSuspiciousFlag = async () => {
+    if (!selectedComplaint) return;
+    const updated = await repository.dismissSuspiciousFlags(
+      selectedComplaint.id,
+      'Community Manager',
+      'Verified as legitimate complaint by manager.'
+    );
+    if (updated) {
+      setSelectedComplaint(updated);
+      await refreshAll();
+      const evs = await repository.getEvents(selectedComplaint.id);
+      setComplaintEvents(evs);
+      showSuccessBanner('Suspicious flag dismissed.');
+    }
   };
 
   const handleCloseReview = () => {
     setSelectedComplaint(null);
+    setSelectedComplaintImages([]);
+    setMatchedComplaint(null);
+    setMatchedImage(null);
     setSearchParams({});
   };
 
-  // Auto-select complaint from URL search parameter (e.g. ?selected=...)
+  // Auto-select complaint from URL search parameter (e.g. ?selected=...) or filter param
   useEffect(() => {
     const targetId = searchParams.get('selected');
     if (targetId) {
@@ -87,6 +138,9 @@ export const ManagerComplaintsPage: React.FC = () => {
       if (found) {
         handleOpenReview(found);
       }
+    }
+    if (searchParams.get('filter') === 'suspicious') {
+      setSuspiciousOnly(true);
     }
   }, [searchParams, complaints]);
 
@@ -102,6 +156,7 @@ export const ManagerComplaintsPage: React.FC = () => {
 
   // Apply filters
   const filteredComplaints = complaints.filter((c) => {
+    if (suspiciousOnly && (!c.isSuspicious || c.dismissedSuspiciousFlags)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchRef = c.reference.toLowerCase().includes(q);
@@ -524,9 +579,25 @@ export const ManagerComplaintsPage: React.FC = () => {
           </select>
         </div>
 
-        <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs text-slate-500">
-          <span>Showing {filteredComplaints.length} of {complaints.length} complaints</span>
-          {(searchQuery || categoryFilter !== 'ALL' || statusFilter !== 'ALL' || priorityFilter !== 'ALL' || workerFilter !== 'ALL') && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
+          <div className="flex items-center gap-2.5">
+            <span>Showing {filteredComplaints.length} of {complaints.length} complaints</span>
+            <button
+              type="button"
+              onClick={() => setSuspiciousOnly(!suspiciousOnly)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                suspiciousOnly
+                  ? 'bg-red-700 text-white shadow-xs'
+                  : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+              }`}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>
+                Suspicious / Flagged ({complaints.filter((c) => c.isSuspicious && !c.dismissedSuspiciousFlags).length})
+              </span>
+            </button>
+          </div>
+          {(searchQuery || categoryFilter !== 'ALL' || statusFilter !== 'ALL' || priorityFilter !== 'ALL' || workerFilter !== 'ALL' || suspiciousOnly) && (
             <button
               type="button"
               onClick={() => {
@@ -535,8 +606,9 @@ export const ManagerComplaintsPage: React.FC = () => {
                 setStatusFilter('ALL');
                 setPriorityFilter('ALL');
                 setWorkerFilter('ALL');
+                setSuspiciousOnly(false);
               }}
-              className="text-teal-700 font-bold hover:underline text-[11px]"
+              className="text-teal-700 font-bold hover:underline text-[11px] cursor-pointer"
             >
               Reset Filters
             </button>
@@ -572,7 +644,17 @@ export const ManagerComplaintsPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {filteredComplaints.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="p-3.5 font-mono font-bold text-slate-900">{c.reference}</td>
+                    <td className="p-3.5 font-mono font-bold text-slate-900">
+                      <div className="space-y-1">
+                        <span>{c.reference}</span>
+                        {c.isSuspicious && !c.dismissedSuspiciousFlags && (
+                          <div className="text-[9px] font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.2 rounded w-fit flex items-center gap-1">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            <span>Flagged</span>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-3.5 max-w-xs">
                       <div className="font-bold text-slate-900 truncate">{c.title}</div>
                       <div className="text-[11px] text-slate-500">{c.category}</div>
@@ -633,9 +715,17 @@ export const ManagerComplaintsPage: React.FC = () => {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-                      {c.reference}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                        {c.reference}
+                      </span>
+                      {c.isSuspicious && !c.dismissedSuspiciousFlags && (
+                        <span className="text-[10px] font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          <span>Flagged</span>
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-sm font-bold text-slate-900 mt-1">{c.title}</h3>
                   </div>
                   <StatusBadge status={c.status} size="sm" />
@@ -664,9 +754,12 @@ export const ManagerComplaintsPage: React.FC = () => {
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                   <span className="text-[11px] text-slate-400">
-                    By {c.residentName} • {new Date(c.createdAt).toLocaleDateString()}
+                    {new Date(c.createdAt).toLocaleDateString()}
                   </span>
-                  <span className="text-teal-800 font-bold">Review & Manage &rarr;</span>
+                  <span className="text-teal-800 font-bold text-xs flex items-center gap-1">
+                    <span>Review</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
                 </div>
               </div>
             ))}
@@ -674,15 +767,15 @@ export const ManagerComplaintsPage: React.FC = () => {
         </>
       )}
 
-      {/* Comprehensive Manager Review Modal */}
+      {/* COMPLAINT REVIEW & TRIAGE MODAL */}
       {selectedComplaint && (
         <Modal
-          isOpen={!!selectedComplaint}
+          isOpen={true}
           onClose={handleCloseReview}
           title={`Review Complaint: ${selectedComplaint.reference}`}
-          maxWidth="lg"
+          maxWidth="xl"
         >
-          <div className="space-y-6 max-h-[80vh] overflow-y-auto pr-1">
+          <div className="space-y-5">
             {/* Action feedback alert */}
             {actionSuccess && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-semibold flex items-center gap-2">
@@ -691,27 +784,31 @@ export const ManagerComplaintsPage: React.FC = () => {
               </div>
             )}
 
-            {/* Header info */}
+            {/* Top Issue Context Card */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {selectedComplaint.reference}
-                  </span>
-                  <StatusBadge status={selectedComplaint.status} size="sm" showFullLabel />
-                  <PriorityBadge priority={selectedComplaint.priority} />
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
+                <div>
+                  <h3 className="text-base font-black text-slate-900">{selectedComplaint.title}</h3>
+                  <div className="text-slate-500 text-[11px] mt-0.5">
+                    Reported on {new Date(selectedComplaint.createdAt).toLocaleString()}
+                  </div>
                 </div>
-                <span className="text-slate-400 text-[11px]">
-                  Filed {new Date(selectedComplaint.createdAt).toLocaleString()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={selectedComplaint.status} size="md" />
+                  <PriorityBadge priority={selectedComplaint.priority} size="md" />
+                </div>
               </div>
 
-              <div className="text-sm font-bold text-slate-900">{selectedComplaint.title}</div>
-              <p className="text-slate-600 whitespace-pre-wrap">{selectedComplaint.description}</p>
+              <div>
+                <span className="font-semibold text-slate-700 block mb-1">Resident Description:</span>
+                <p className="text-slate-800 leading-relaxed bg-white p-3 rounded-xl border border-slate-200">
+                  {selectedComplaint.description}
+                </p>
+              </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-slate-500 pt-2 border-t border-slate-200/60">
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-teal-700" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
                   <span>{selectedComplaint.block} • {selectedComplaint.specificLocation}</span>
                 </span>
                 <span>Resident: <strong className="text-slate-700">{selectedComplaint.residentName}</strong> (Flat {selectedComplaint.residentFlat})</span>
@@ -728,6 +825,230 @@ export const ManagerComplaintsPage: React.FC = () => {
                 <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
                   <span className="font-semibold text-slate-700 block">Submitted Photos:</span>
                   <ImageViewer imageIds={selectedComplaint.originalImageIds} />
+                </div>
+              )}
+
+              {/* Dedicated Image Verification & Integrity Panel */}
+              {(selectedComplaint.isSuspicious ||
+                selectedComplaint.suspiciousFlags ||
+                selectedComplaint.imageVerificationStatus ||
+                selectedComplaintImages.some((img) => img.quality)) && (
+                <div
+                  className={`mt-3 p-4 rounded-2xl border text-xs space-y-3 ${
+                    selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags
+                      ? 'bg-red-50/70 border-red-300'
+                      : 'bg-white border-slate-200 shadow-2xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b pb-2 border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle
+                        className={`w-4 h-4 ${
+                          selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags
+                            ? 'text-red-600'
+                            : 'text-slate-500'
+                        }`}
+                      />
+                      <h4 className="font-bold text-slate-900 text-sm">Image Verification & Integrity</h4>
+                    </div>
+
+                    {selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags ? (
+                      <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-300 font-bold text-[10px]">
+                        Suspicious / Verification Flagged
+                      </span>
+                    ) : selectedComplaint.dismissedSuspiciousFlags ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
+                        Verification Flag Dismissed
+                      </span>
+                    ) : selectedComplaint.imageVerificationStatus === 'Verified' ? (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[10px]">
+                        Visual Match Verified
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold text-[10px]">
+                        Verification Checked
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Flag List */}
+                  {selectedComplaint.suspiciousFlags && selectedComplaint.suspiciousFlags.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="font-semibold text-slate-700">Flagged Conditions:</span>
+                      <ul className="space-y-1">
+                        {selectedComplaint.suspiciousFlags.map((flag, idx) => (
+                          <li
+                            key={idx}
+                            className="p-2 bg-white rounded-lg border border-red-200 text-slate-800 flex items-start gap-2 shadow-2xs"
+                          >
+                            <span className="px-1.5 py-0.5 bg-red-100 text-red-800 text-[9px] font-bold rounded shrink-0">
+                              {flag.type}
+                            </span>
+                            <span className="text-[11px]">{flag.details}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Reused Photo Side-by-Side Comparison */}
+                  {matchedImage && selectedComplaintImages.length > 0 && (
+                    <div className="p-3 bg-white rounded-xl border border-red-200 space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-red-900 text-xs flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                          <span>Side-by-Side Reused Photo Comparison</span>
+                        </span>
+                        {selectedComplaint.suspiciousFlags?.find((f) => f.type === 'REUSED_PHOTO')
+                          ?.similarityPercentage && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">
+                            {
+                              selectedComplaint.suspiciousFlags.find((f) => f.type === 'REUSED_PHOTO')
+                                ?.similarityPercentage
+                            }
+                            % Visual Similarity
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        {/* Current Report Photo */}
+                        <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                          <span className="text-[10px] font-bold text-slate-700 block uppercase tracking-wider">
+                            Current: {selectedComplaint.reference}
+                          </span>
+                          <div className="aspect-video w-full rounded overflow-hidden bg-slate-200">
+                            <img
+                              src={URL.createObjectURL(selectedComplaintImages[0].blob)}
+                              alt="Current complaint photo"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-600 truncate">
+                            Reported by: <strong>{selectedComplaint.residentName}</strong>
+                          </p>
+                          <p className="text-[9px] text-slate-400">
+                            {new Date(selectedComplaint.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+
+                        {/* Matched Original Photo */}
+                        <div className="space-y-1.5 bg-red-50/60 p-2.5 rounded-lg border border-red-200">
+                          <span className="text-[10px] font-bold text-red-800 block uppercase tracking-wider">
+                            Original: {matchedComplaint?.reference || 'Previous Report'}
+                          </span>
+                          <div className="aspect-video w-full rounded overflow-hidden bg-slate-200">
+                            <img
+                              src={URL.createObjectURL(matchedImage.blob)}
+                              alt="Original matched photo"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-700 truncate">
+                            Reported by: <strong>{matchedComplaint?.residentName || 'Previous Resident'}</strong>
+                          </p>
+                          <p className="text-[9px] text-slate-400">
+                            {matchedComplaint ? new Date(matchedComplaint.createdAt).toLocaleString() : 'Past record'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Image Quality Metrics */}
+                  {selectedComplaintImages.some((img) => img.quality) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {selectedComplaintImages.map(
+                        (img, idx) =>
+                          img.quality && (
+                            <div key={img.id} className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-[11px] text-slate-800">
+                                  Photo {idx + 1} Quality:
+                                </span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                    img.quality.status === 'Clear'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                                >
+                                  {img.quality.status}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 flex justify-between">
+                                <span>Luminance: {img.quality.brightness} / 255</span>
+                                <span>Sharpness: {img.quality.sharpness}</span>
+                              </div>
+                              {img.quality.feedback && (
+                                <p className="text-[10px] text-slate-600 italic">{img.quality.feedback}</p>
+                              )}
+                            </div>
+                          )
+                      )}
+                    </div>
+                  )}
+
+                  {/* Visual Model Category Suggestion */}
+                  {selectedComplaint.visualCategorySuggested && (
+                    <div className="p-2.5 bg-white rounded-lg border border-teal-200 text-slate-800 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[11px] flex items-center gap-1 text-teal-900">
+                          <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                          <span>Visual Model Classification:</span>
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold text-[10px]">
+                          {selectedComplaint.visualCategorySuggested}
+                        </span>
+                      </div>
+                      {selectedComplaint.visualExplanation && (
+                        <p className="text-[10px] text-slate-600">{selectedComplaint.visualExplanation}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manager Actions on Suspicious Flag */}
+                  {selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags && (
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
+                      <button
+                        type="button"
+                        onClick={handleDismissSuspiciousFlag}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Dismiss Suspicious Flag</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCorrectionReason(
+                            'Please upload a clear, original photograph taken directly at the location of the issue.'
+                          );
+                          setShowCorrectionModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                        <span>Request Photo Correction</span>
+                      </button>
+
+                      {selectedComplaint.visualCategorySuggested &&
+                        selectedComplaint.visualCategorySuggested !== 'Uncertain' &&
+                        selectedComplaint.visualCategorySuggested !== selectedComplaint.category && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewCategory(selectedComplaint.visualCategorySuggested as ComplaintCategory);
+                            }}
+                            className="px-3 py-1.5 bg-teal-100 hover:bg-teal-200 text-teal-900 border border-teal-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                            <span>Reassign to {selectedComplaint.visualCategorySuggested}</span>
+                          </button>
+                        )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
