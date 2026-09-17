@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { repository } from '../../db/repository';
-import type { Complaint, ComplaintEvent, ImageAsset } from '../../types';
+import type { Complaint, ComplaintEvent, ImageAsset, GeoLocationData } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
 import { ImageViewer } from '../../components/common/ImageViewer';
+import { LiveCameraModal, type LiveCaptureResult } from '../../components/camera/LiveCameraModal';
+import { createCaptureSession, validateAndConsumeSession } from '../../services/captureSessionService';
+import { checkLocationDiscrepancy } from '../../lib/geoUtils';
 import {
   ArrowLeft,
   Play,
-  Upload,
   CheckCircle,
   MapPin,
   Calendar,
@@ -18,12 +20,22 @@ import {
   Send,
   Camera,
   RotateCcw,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface CompletionImageFile {
   id: string;
-  file: File;
+  rawBlob: Blob;
+  stampedBlob?: Blob;
   previewUrl: string;
+  fileName: string;
+  geo?: GeoLocationData;
+  captureSessionId?: string;
+  discrepancy?: {
+    isDiscrepancy: boolean;
+    distanceMeters: number;
+    workerDistanceToIssue?: number;
+  };
 }
 
 export const WorkerTaskDetailPage: React.FC = () => {
@@ -44,8 +56,8 @@ export const WorkerTaskDetailPage: React.FC = () => {
   const [completionImages, setCompletionImages] = useState<CompletionImageFile[]>([]);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [isSubmittingCompletion, setIsSubmittingCompletion] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [dragOrPasteNotice, setDragOrPasteNotice] = useState<string | null>(null);
 
   // Clean up object URLs
   useEffect(() => {
@@ -184,35 +196,68 @@ export const WorkerTaskDetailPage: React.FC = () => {
     }
   };
 
-  // File Upload Handlers for Completion Proof
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // In-app live camera capture for worker completion evidence
+  const handlePhotoCaptured = async (result: LiveCaptureResult) => {
     setCompletionError(null);
-    if (!e.target.files) return;
+    if (!activeWorker || !task) return;
 
-    const files = Array.from(e.target.files);
-    const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSizeBytes = 5 * 1024 * 1024;
-
-    const newUploaded: CompletionImageFile[] = [];
-
-    for (const file of files) {
-      if (!validMimes.includes(file.type)) {
-        setCompletionError(`"${file.name}" is not supported. Please upload JPG, PNG, or WebP.`);
-        return;
-      }
-      if (file.size > maxSizeBytes) {
-        setCompletionError(`"${file.name}" exceeds 5 MB.`);
-        return;
-      }
-      newUploaded.push({
-        id: crypto.randomUUID(),
-        file,
-        previewUrl: URL.createObjectURL(file),
+    try {
+      // 1. Authoritative Capture Session
+      const session = createCaptureSession({
+        userId: activeWorker.id,
+        role: 'Worker',
+        communityId: 'default',
+        draftType: 'worker_completion',
+        draftId: task.id,
       });
-    }
 
-    setCompletionImages((prev) => [...prev, ...newUploaded]);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+      const validation = await validateAndConsumeSession({
+        sessionId: session.id,
+        token: session.token,
+        userId: activeWorker.id,
+        role: 'Worker',
+        draftId: task.id,
+        imageBlob: result.rawBlob,
+        geoData: result.geoData,
+      });
+
+      if (!validation.valid) {
+        setCompletionError(validation.error);
+        return;
+      }
+
+      // 2. Check location discrepancy against original complaint coordinates
+      const taskCoords =
+        task.latitude !== undefined && task.longitude !== undefined
+          ? { latitude: task.latitude, longitude: task.longitude, accuracy: 50 }
+          : null;
+
+      const discrepancyCheck = checkLocationDiscrepancy(
+        {
+          latitude: result.geoData.latitude,
+          longitude: result.geoData.longitude,
+          accuracy: result.geoData.accuracy,
+        },
+        taskCoords,
+        250 // 250m community tolerance
+      );
+
+      const newRecord: CompletionImageFile = {
+        id: crypto.randomUUID(),
+        rawBlob: result.rawBlob,
+        stampedBlob: result.stampedBlob,
+        previewUrl: result.previewUrl,
+        fileName: `completion_proof_${Date.now().toString().slice(-6)}.jpg`,
+        geo: result.geoData,
+        captureSessionId: session.id,
+        discrepancy: discrepancyCheck,
+      };
+
+      setCompletionImages((prev) => [...prev, newRecord]);
+    } catch (err: any) {
+      console.error('Failed to capture completion photo:', err);
+      setCompletionError(err.message || 'Error capturing completion photo.');
+    }
   };
 
   const handleRemoveImage = (id: string) => {
@@ -243,20 +288,43 @@ export const WorkerTaskDetailPage: React.FC = () => {
     setIsSubmittingCompletion(true);
     try {
       const imageIds: string[] = [];
+      let primaryGeo: GeoLocationData | undefined;
+      let primaryDiscrepancy: { isDiscrepancy: boolean; distanceMeters: number } | undefined;
+
       for (const img of completionImages) {
         const asset: ImageAsset = {
           id: img.id,
-          blob: img.file,
-          mimeType: img.file.type,
-          originalName: img.file.name,
-          size: img.file.size,
+          blob: img.rawBlob,
+          stampedBlob: img.stampedBlob,
+          mimeType: 'image/jpeg',
+          originalName: img.fileName,
+          size: img.rawBlob.size,
           createdAt: new Date().toISOString(),
+          captureSessionId: img.captureSessionId,
+          latitude: img.geo?.latitude,
+          longitude: img.geo?.longitude,
+          accuracy: img.geo?.accuracy,
+          address: img.geo?.address,
+          locationTimestamp: img.geo?.locationTimestamp,
+          clientCaptureTimestamp: img.geo?.clientCaptureTimestamp,
+          serverReceivedTimestamp: img.geo?.serverReceivedTimestamp,
+          isLiveCapture: true,
         };
         await repository.saveImage(asset);
         imageIds.push(img.id);
+
+        if (img.geo && !primaryGeo) {
+          primaryGeo = img.geo;
+        }
+        if (img.discrepancy && !primaryDiscrepancy) {
+          primaryDiscrepancy = img.discrepancy;
+        }
       }
 
       const now = new Date().toISOString();
+      const hasDiscrepancy = !!primaryDiscrepancy?.isDiscrepancy;
+      const discrepancyDist = primaryDiscrepancy ? Math.round(primaryDiscrepancy.distanceMeters) : undefined;
+
       // Keep status as In Progress while evidence awaits approval per requirements
       const updated: Complaint = {
         ...task,
@@ -265,6 +333,22 @@ export const WorkerTaskDetailPage: React.FC = () => {
         completionNotes: completionNote.trim(),
         completionImageIds: imageIds,
         completionSubmittedAt: now,
+        completionLatitude: primaryGeo?.latitude,
+        completionLongitude: primaryGeo?.longitude,
+        completionAccuracy: primaryGeo?.accuracy,
+        completionDistanceToIssueMeters: discrepancyDist,
+        completionLocationDiscrepancy: hasDiscrepancy,
+        isSuspicious: hasDiscrepancy ? true : task.isSuspicious,
+        suspiciousFlags: hasDiscrepancy
+          ? [
+              ...(task.suspiciousFlags || []),
+              {
+                type: 'LOCATION_DISCREPANCY',
+                severity: 'warning',
+                details: `Worker completion photo was recorded ~${discrepancyDist}m from reported complaint coordinates.`,
+              },
+            ]
+          : task.suspiciousFlags,
         correctionReason: undefined, // Clear past correction request
         updatedAt: now,
       };
@@ -488,12 +572,30 @@ export const WorkerTaskDetailPage: React.FC = () => {
 
               <div className="flex flex-wrap gap-2.5">
                 {completionImages.map((img) => (
-                  <div key={img.id} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                  <div key={img.id} className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group shadow-2xs">
                     <img src={img.previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                    
+                    {img.geo && (
+                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 text-teal-300 text-[9px] font-mono rounded flex items-center gap-1">
+                        <MapPin className="w-2.5 h-2.5 text-teal-400" />
+                        <span>GPS</span>
+                      </span>
+                    )}
+
+                    {img.discrepancy?.isDiscrepancy && (
+                      <span
+                        className="absolute top-1 left-1 px-1.5 py-0.5 bg-amber-600 text-white text-[8px] font-bold rounded shadow-xs"
+                        title={`~${Math.round(img.discrepancy.distanceMeters)}m from reported issue`}
+                      >
+                        ~{Math.round(img.discrepancy.distanceMeters)}m
+                      </span>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(img.id)}
-                      className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full hover:bg-black"
+                      className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full hover:bg-black transition-colors"
+                      aria-label="Remove photo"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -502,21 +604,43 @@ export const WorkerTaskDetailPage: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-600 hover:bg-amber-50/40 flex flex-col items-center justify-center text-slate-500 hover:text-amber-800 transition-colors cursor-pointer"
+                  onClick={() => setShowCameraModal(true)}
+                  className="w-24 h-24 rounded-xl border-2 border-dashed border-amber-500/50 hover:border-amber-600 hover:bg-amber-50/40 flex flex-col items-center justify-center text-amber-800 transition-colors cursor-pointer"
                 >
-                  <Upload className="w-5 h-5 mb-1 text-slate-400" />
-                  <span className="text-[10px] font-bold">Upload</span>
+                  <Camera className="w-5 h-5 mb-1 text-amber-600" />
+                  <span className="text-[10px] font-bold text-center leading-tight">Take Live Photo</span>
+                  <span className="text-[8px] text-amber-600/80 mt-0.5">GPS Tagged</span>
                 </button>
               </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
+              {/* In-App Camera Only Disclosure */}
+              <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
+                <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Camera & Location Required:</strong> Resolution photos must be captured live at the job site. Direct file picking, gallery selection, and drag-and-drop are disabled.
+                </span>
+              </div>
+
+              {/* Drag or Paste blocked feedback */}
+              {dragOrPasteNotice && (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 font-medium flex items-center justify-between">
+                  <span>{dragOrPasteNotice}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDragOrPasteNotice(null)}
+                    className="text-amber-700 hover:text-amber-900 p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Live Camera Modal */}
+              <LiveCameraModal
+                isOpen={showCameraModal}
+                onClose={() => setShowCameraModal(false)}
+                onPhotoCaptured={handlePhotoCaptured}
+                title="Capture Resolution Evidence Photo"
               />
             </div>
 

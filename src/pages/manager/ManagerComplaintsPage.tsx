@@ -17,6 +17,7 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
 import { ImageViewer } from '../../components/common/ImageViewer';
 import { Modal } from '../../components/common/Modal';
+import { formatCoordinates } from '../../lib/geoUtils';
 import {
   Search,
   UserCheck,
@@ -31,6 +32,9 @@ import {
   AlertTriangle,
   AlertCircle,
   ArrowRight,
+  ShieldCheck,
+  Monitor,
+  Navigation,
 } from 'lucide-react';
 
 export const ManagerComplaintsPage: React.FC = () => {
@@ -823,8 +827,54 @@ export const ManagerComplaintsPage: React.FC = () => {
               {/* Photos */}
               {selectedComplaint.originalImageIds.length > 0 && (
                 <div className="pt-2 border-t border-slate-200/60 space-y-1.5">
-                  <span className="font-semibold text-slate-700 block">Submitted Photos:</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-700 block">Submitted Photos:</span>
+                    {selectedComplaint.isLiveCapture && (
+                      <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-teal-700" />
+                        <span>Live Camera Capture</span>
+                      </span>
+                    )}
+                  </div>
                   <ImageViewer imageIds={selectedComplaint.originalImageIds} />
+                </div>
+              )}
+
+              {/* GPS Capture Verification Card */}
+              {(selectedComplaint.captureLatitude !== undefined && selectedComplaint.captureLongitude !== undefined) && (
+                <div className="p-3 bg-teal-50/70 border border-teal-200 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-teal-950 text-xs flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-teal-700" />
+                      <span>GPS Tagged Capture Location</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-900 font-mono text-[10px] font-bold">
+                      {formatCoordinates(selectedComplaint.captureLatitude, selectedComplaint.captureLongitude)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] text-teal-900/90 pt-1 border-t border-teal-200/60">
+                    <div>
+                      <span className="text-teal-700/80">Accuracy Radius: </span>
+                      <strong>±{Math.round(selectedComplaint.captureAccuracy || 0)} meters</strong>
+                    </div>
+                    {selectedComplaint.captureLocationTimestamp && (
+                      <div>
+                        <span className="text-teal-700/80">Captured: </span>
+                        <span>{new Date(selectedComplaint.captureLocationTimestamp).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {selectedComplaint.captureAddress && (
+                      <div className="sm:col-span-2">
+                        <span className="text-teal-700/80">Reverse-Geocoded: </span>
+                        <span>{selectedComplaint.captureAddress}</span>
+                      </div>
+                    )}
+                    {selectedComplaint.captureSessionId && (
+                      <div className="sm:col-span-2 text-[10px] font-mono text-teal-800/70 truncate">
+                        Validated Session: {selectedComplaint.captureSessionId}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -989,23 +1039,100 @@ export const ManagerComplaintsPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Visual Model Category Suggestion */}
-                  {selectedComplaint.visualCategorySuggested && (
-                    <div className="p-2.5 bg-white rounded-lg border border-teal-200 text-slate-800 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-[11px] flex items-center gap-1 text-teal-900">
-                          <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                          <span>Visual Model Classification:</span>
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-bold text-[10px]">
-                          {selectedComplaint.visualCategorySuggested}
-                        </span>
+                  {/* Four Verification Partitions */}
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <span className="font-bold text-slate-800 text-[11px] block uppercase tracking-wider">
+                      Verification Partitions & Authenticity Signals
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {/* 1. Category Match */}
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] text-slate-800 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                            <span>1. Category Match</span>
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            selectedComplaint.imageVerificationStatus === 'Verified'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : selectedComplaint.imageVerificationStatus === 'Mismatch'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {selectedComplaint.imageVerificationStatus || 'Unavailable'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-600">
+                          {selectedComplaint.visualExplanation ||
+                            (selectedComplaint.visualCategorySuggested
+                              ? `Model classified as ${selectedComplaint.visualCategorySuggested}.`
+                              : 'Visual category classifier is inactive (Gemini API key not configured).')}
+                        </p>
                       </div>
-                      {selectedComplaint.visualExplanation && (
-                        <p className="text-[10px] text-slate-600">{selectedComplaint.visualExplanation}</p>
-                      )}
+
+                      {/* 2. Community Duplicate Check */}
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] text-slate-800 flex items-center gap-1.5">
+                            <FileText className="w-3.5 h-3.5 text-teal-600" />
+                            <span>2. Community Duplicate</span>
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            matchedComplaint
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {matchedComplaint ? 'Duplicate Match' : 'Unique Photo'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-600">
+                          {matchedComplaint
+                            ? `64-bit dHash matched prior report ${matchedComplaint.reference}.`
+                            : 'Perceptual dHash scanned across community database; no duplicate detected.'}
+                        </p>
+                      </div>
+
+                      {/* 3. Screen / Display Check */}
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] text-slate-800 flex items-center gap-1.5">
+                            <Monitor className="w-3.5 h-3.5 text-slate-500" />
+                            <span>3. Screen/Display Signal</span>
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            selectedComplaint.suspiciousFlags?.some((f) => f.type === 'POSSIBLE_SCREEN_PHOTO')
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {selectedComplaint.suspiciousFlags?.some((f) => f.type === 'POSSIBLE_SCREEN_PHOTO')
+                              ? 'Screen Artifacts Flagged'
+                              : 'No Screen Artifacts'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 italic">
+                          {selectedComplaint.suspiciousFlags?.find((f) => f.type === 'POSSIBLE_SCREEN_PHOTO')?.details ||
+                            'Moiré/scanline heuristic shows no monitor artifacts. Note: This is an advisory review signal.'}
+                        </p>
+                      </div>
+
+                      {/* 4. External Web Search */}
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] text-slate-800 flex items-center gap-1.5">
+                            <Globe className="w-3.5 h-3.5 text-slate-400" />
+                            <span>4. External Web Search</span>
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-medium">
+                            Not Configured
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Web-image matching not configured (external reverse search requires dedicated reverse-image API integration).
+                        </p>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Manager Actions on Suspicious Flag */}
                   {selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags && (
@@ -1079,6 +1206,42 @@ export const ManagerComplaintsPage: React.FC = () => {
                   <div className="space-y-1">
                     <span className="font-semibold text-slate-700">Evidence Photos:</span>
                     <ImageViewer imageIds={selectedComplaint.completionImageIds} />
+                  </div>
+                )}
+
+                {/* Worker Completion GPS Verification & Discrepancy Inspector */}
+                {(selectedComplaint.completionLatitude !== undefined && selectedComplaint.completionLongitude !== undefined) && (
+                  <div className="p-3 bg-white rounded-xl border border-emerald-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                        <Navigation className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Worker Resolution GPS Verification</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono text-[10px] font-bold">
+                        {formatCoordinates(selectedComplaint.completionLatitude, selectedComplaint.completionLongitude)}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+                      <span>
+                        GPS Accuracy: ±{Math.round(selectedComplaint.completionAccuracy || 0)}m
+                      </span>
+                      {selectedComplaint.completionDistanceToIssueMeters !== undefined && (
+                        <span>
+                          Distance to Reported Issue: <strong>~{selectedComplaint.completionDistanceToIssueMeters} meters</strong>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Location Discrepancy Warning */}
+                    {selectedComplaint.completionLocationDiscrepancy && (
+                      <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2 mt-1">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Location Discrepancy Flag:</strong> Worker resolution photo was recorded ~{selectedComplaint.completionDistanceToIssueMeters}m away from the original issue coordinates (community threshold: 250m). Please inspect completion evidence carefully before approving.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

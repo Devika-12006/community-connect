@@ -558,12 +558,104 @@ export function compareSelectedWithVisualCategory(
 }
 
 /**
+ * Heuristic screen/display photograph detector.
+ * Identifies high-frequency periodic moiré artifacts, LCD scanline banding,
+ * or extreme unnatural backlight characteristics commonly found when photographing
+ * a monitor, laptop, or phone screen.
+ *
+ * NOTE: This is an uncertain review signal for human triage and does not definitively
+ * prove fraud.
+ */
+export async function detectScreenOrDisplayArtifacts(
+  fileOrBlob: Blob
+): Promise<{ isScreenPhoto: boolean; score: number; details?: string }> {
+  try {
+    const bitmap = await createImageBitmap(fileOrBlob);
+    const canvas = document.createElement('canvas');
+    const sampleSize = 128;
+    canvas.width = sampleSize;
+    canvas.height = sampleSize;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      return { isScreenPhoto: false, score: 0 };
+    }
+
+    ctx.drawImage(bitmap, 0, 0, sampleSize, sampleSize);
+    const imgData = ctx.getImageData(0, 0, sampleSize, sampleSize);
+    const data = imgData.data;
+
+    let alternatingRowDiff = 0;
+    let blueDominanceCount = 0;
+    let highFreqCount = 0;
+
+    for (let y = 1; y < sampleSize - 1; y++) {
+      for (let x = 1; x < sampleSize - 1; x++) {
+        const idx = (y * sampleSize + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+
+        // Backlight blue peak check
+        if (b > r + 35 && b > g + 25 && (r + g + b) > 300) {
+          blueDominanceCount++;
+        }
+
+        // Horizontal alternating row frequency (raster/scanline pattern)
+        const topIdx = ((y - 1) * sampleSize + x) * 4;
+        const bottomIdx = ((y + 1) * sampleSize + x) * 4;
+        const lumCenter = 0.299 * r + 0.587 * g + 0.114 * b;
+        const lumTop = 0.299 * data[topIdx] + 0.587 * data[topIdx + 1] + 0.114 * data[topIdx + 2];
+        const lumBottom = 0.299 * data[bottomIdx] + 0.587 * data[bottomIdx + 1] + 0.114 * data[bottomIdx + 2];
+
+        const rowStep = Math.abs(lumCenter * 2 - lumTop - lumBottom);
+        if (rowStep > 40) {
+          alternatingRowDiff++;
+        }
+
+        // Local high-contrast micro-edges indicative of pixel grids
+        const leftIdx = (y * sampleSize + (x - 1)) * 4;
+        const lumLeft = 0.299 * data[leftIdx] + 0.587 * data[leftIdx + 1] + 0.114 * data[leftIdx + 2];
+        if (Math.abs(lumCenter - lumLeft) > 55) {
+          highFreqCount++;
+        }
+      }
+    }
+
+    const totalSamples = (sampleSize - 2) * (sampleSize - 2);
+    const moireRatio = alternatingRowDiff / totalSamples;
+    const blueRatio = blueDominanceCount / totalSamples;
+    const highFreqRatio = highFreqCount / totalSamples;
+
+    // Score combines periodic row banding, pixel grid edges, and display backlight signature
+    const score = Math.min(100, Math.round((moireRatio * 200 + highFreqRatio * 100 + blueRatio * 150)));
+
+    if (score >= 60) {
+      return {
+        isScreenPhoto: true,
+        score,
+        details: 'Potential computer or phone screen photograph detected (periodic scanline/moiré pattern). Flagged for reviewer inspection.',
+      };
+    }
+
+    return {
+      isScreenPhoto: false,
+      score,
+    };
+  } catch (err) {
+    console.warn('Screen detection heuristic error:', err);
+    return { isScreenPhoto: false, score: 0 };
+  }
+}
+
+/**
  * Builds suspicious flags for a complaint based on verification outcomes.
  */
 export function buildSuspiciousFlags(params: {
   reusedMatch?: ReusedPhotoMatch | null;
   qualityReports?: ImageQualityReport[];
   categoryComparison?: ReturnType<typeof compareSelectedWithVisualCategory>;
+  screenCheck?: { isScreenPhoto: boolean; details?: string };
+  locationDiscrepancy?: { isDiscrepancy: boolean; distanceMeters: number };
 }): SuspiciousFlag[] {
   const flags: SuspiciousFlag[] = [];
 
@@ -605,5 +697,24 @@ export function buildSuspiciousFlags(params: {
     });
   }
 
+  // 4. Possible screen / display photo
+  if (params.screenCheck && params.screenCheck.isScreenPhoto) {
+    flags.push({
+      type: 'POSSIBLE_SCREEN_PHOTO',
+      severity: 'warning',
+      details: params.screenCheck.details || 'Possible monitor or phone screen photograph detected (periodic scanline/moiré pattern).',
+    });
+  }
+
+  // 5. Worker Location Discrepancy
+  if (params.locationDiscrepancy && params.locationDiscrepancy.isDiscrepancy) {
+    flags.push({
+      type: 'LOCATION_DISCREPANCY',
+      severity: 'warning',
+      details: `Worker resolution photo was recorded ${Math.round(params.locationDiscrepancy.distanceMeters)}m away from reported complaint location.`,
+    });
+  }
+
   return flags;
 }
+

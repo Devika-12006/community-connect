@@ -125,6 +125,25 @@ export interface Complaint {
   imageVerificationStatus?: 'Verified' | 'Mismatch' | 'Uncertain' | 'Unavailable';
   visualCategorySuggested?: ComplaintCategory | 'Uncertain';
   visualExplanation?: string;
+  // Geolocation & Live Capture Metadata
+  captureLatitude?: number;
+  captureLongitude?: number;
+  captureAccuracy?: number;
+  captureLocationTimestamp?: string;
+  captureClientTimestamp?: string;
+  captureServerTimestamp?: string;
+  captureSessionId?: string;
+  captureAddress?: string;
+  isLiveCapture?: boolean;
+  reportedLatitude?: number; // Separate resident map pin if adjusted
+  reportedLongitude?: number;
+  // Worker completion location check
+  completionLatitude?: number;
+  completionLongitude?: number;
+  completionAccuracy?: number;
+  completionDistanceToIssueMeters?: number;
+  completionLocationDiscrepancy?: boolean;
+  completionLocationDetails?: string;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
@@ -143,7 +162,9 @@ export interface ImageQualityReport {
 export type SuspiciousFlagType =
   | 'REUSED_PHOTO'
   | 'CATEGORY_MISMATCH'
-  | 'UNUSABLE_IMAGE';
+  | 'UNUSABLE_IMAGE'
+  | 'POSSIBLE_SCREEN_PHOTO'
+  | 'LOCATION_DISCREPANCY';
 
 export interface SuspiciousFlag {
   type: SuspiciousFlagType;
@@ -153,6 +174,41 @@ export interface SuspiciousFlag {
   matchedComplaintReference?: string;
   matchedImageId?: string;
   similarityPercentage?: number;
+}
+
+export interface GeoLocationData {
+  latitude: number;
+  longitude: number;
+  accuracy: number; // meters
+  altitude?: number | null;
+  locationTimestamp: string;
+  clientCaptureTimestamp: string;
+  serverReceivedTimestamp?: string;
+  address?: string;
+}
+
+export interface CaptureSession {
+  id: string;
+  token: string;
+  userId: string;
+  role: RoleType;
+  communityId: string;
+  draftType: 'complaint' | 'worker_completion';
+  draftId: string;
+  createdAt: string;
+  expiresAt: string;
+  isConsumed: boolean;
+  consumedAt?: string;
+  consumedWithImageHash?: string;
+}
+
+export interface StampedImageRecord {
+  originalImageId: string;
+  stampedImageId?: string;
+  sessionId: string;
+  geo: GeoLocationData;
+  formattedCoordinates: string;
+  stampedAt: string;
 }
 
 export type ComplaintEventType =
@@ -203,6 +259,7 @@ export interface ImageAsset {
   id: string;
   complaintId?: string;
   blob: Blob;
+  stampedBlob?: Blob;
   mimeType: string;
   originalName: string;
   size: number;
@@ -210,4 +267,13 @@ export interface ImageAsset {
   perceptualHash?: string; // 64-bit dHash hex string
   contentHash?: string; // SHA-256 or digest hex
   quality?: ImageQualityReport;
+  captureSessionId?: string;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+  locationTimestamp?: string;
+  clientCaptureTimestamp?: string;
+  serverReceivedTimestamp?: string;
+  address?: string;
+  isLiveCapture?: boolean;
 }

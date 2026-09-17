@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { repository } from '../../db/repository';
@@ -8,19 +8,23 @@ import {
   type Complaint,
   type ImageAsset,
   type ImageQualityReport,
+  type GeoLocationData,
 } from '../../types';
 import { suggestCategory, checkPossibleDuplicate, type DuplicateWarning } from '../../lib/smartAssistance';
 import {
-  validateImageBytes,
   inspectImageWithCanvas,
   computeContentHash,
   checkImageDuplicates,
   classifyImageWithVisionModel,
   compareSelectedWithVisualCategory,
+  detectScreenOrDisplayArtifacts,
   buildSuspiciousFlags,
   type ReusedPhotoMatch,
   type VisualClassificationResult,
 } from '../../lib/imageVerification';
+import { LiveCameraModal, type LiveCaptureResult } from '../../components/camera/LiveCameraModal';
+import { createCaptureSession, validateAndConsumeSession } from '../../services/captureSessionService';
+import { formatCoordinates } from '../../lib/geoUtils';
 import {
   MapPin,
   CheckCircle2,
@@ -29,21 +33,27 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
-  Upload,
   Compass,
   AlertCircle,
   Eye,
   Loader2,
+  Camera,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface UploadedImageFile {
   id: string;
-  file: File;
+  rawBlob: Blob;
+  stampedBlob?: Blob;
   previewUrl: string;
+  fileName: string;
   quality?: ImageQualityReport;
   dHash?: string;
   contentHash?: string;
   reusedMatch?: ReusedPhotoMatch | null;
+  screenCheck?: { isScreenPhoto: boolean; score: number; details?: string };
+  geo?: GeoLocationData;
+  captureSessionId?: string;
   isValidating?: boolean;
 }
 
@@ -86,7 +96,9 @@ export const ReportIssuePage: React.FC = () => {
   const [createdComplaint, setCreatedComplaint] = useState<Complaint | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [draftId] = useState(() => crypto.randomUUID());
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [dragOrPasteNotice, setDragOrPasteNotice] = useState<string | null>(null);
 
   // Clean up object URLs on unmount
   useEffect(() => {
@@ -119,88 +131,115 @@ export const ReportIssuePage: React.FC = () => {
     }
   }, [title, category, block, complaints]);
 
-  // Handle image selection with verification, quality check, and duplicate scanning
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle in-app live camera capture with server-validated session and geo-tagging
+  const handlePhotoCaptured = async (result: LiveCaptureResult) => {
     setUploadError(null);
-    if (!e.target.files) return;
+    if (!activeResident) {
+      setUploadError('Active resident profile required to capture photos.');
+      return;
+    }
 
-    const files = Array.from(e.target.files);
-    if (images.length + files.length > 3) {
-      setUploadError('You can upload a maximum of 3 photos.');
+    if (images.length >= 3) {
+      setUploadError('You can attach a maximum of 3 live photos.');
       return;
     }
 
     setIsAnalyzingImage(true);
-    let existingImages: ImageAsset[] = [];
+
     try {
-      existingImages = await repository.getAllImages();
-    } catch (err) {
-      console.warn('Failed to load existing images for duplicate check:', err);
-    }
+      // 1. Authoritative Capture Session creation & atomic validation
+      const session = createCaptureSession({
+        userId: activeResident.id,
+        role: 'Resident',
+        communityId: settings.name || 'default',
+        draftType: 'complaint',
+        draftId,
+      });
 
-    const newUploaded: UploadedImageFile[] = [];
+      const validation = await validateAndConsumeSession({
+        sessionId: session.id,
+        token: session.token,
+        userId: activeResident.id,
+        role: 'Resident',
+        draftId,
+        imageBlob: result.rawBlob,
+        geoData: result.geoData,
+      });
 
-    for (const file of files) {
-      // 1. Binary header and size validation
-      const byteCheck = await validateImageBytes(file);
-      if (!byteCheck.valid) {
-        setUploadError(`"${file.name}": ${byteCheck.error}`);
+      if (!validation.valid) {
+        setUploadError(validation.error);
         setIsAnalyzingImage(false);
         return;
       }
 
-      const previewUrl = URL.createObjectURL(file);
-      const id = crypto.randomUUID();
-
+      // 2. Offscreen Canvas quality analysis & 64-bit dHash
       let quality: ImageQualityReport | undefined;
       let dHash: string | undefined;
       let contentHash: string | undefined;
       let reusedMatch: ReusedPhotoMatch | null = null;
+      let screenCheck: { isScreenPhoto: boolean; score: number; details?: string } | undefined;
 
       try {
-        // 2. Offscreen Canvas quality analysis & 64-bit dHash
-        const canvasInspection = await inspectImageWithCanvas(file);
+        const canvasInspection = await inspectImageWithCanvas(result.rawBlob);
         quality = canvasInspection.quality;
         dHash = canvasInspection.dHash;
-        contentHash = await computeContentHash(file);
+        contentHash = await computeContentHash(result.rawBlob);
 
-        // 3. Duplicate check across existing complaints
-        reusedMatch = checkImageDuplicates(
-          dHash,
-          contentHash,
-          existingImages,
-          complaints
-        );
+        const existingImages = await repository.getAllImages();
+        reusedMatch = checkImageDuplicates(dHash, contentHash, existingImages, complaints);
+        screenCheck = await detectScreenOrDisplayArtifacts(result.rawBlob);
       } catch (inspectErr) {
-        console.warn('Canvas image analysis error:', inspectErr);
+        console.warn('Image analysis error:', inspectErr);
       }
 
-      newUploaded.push({
+      // 3. Populate complaint location from camera GPS if not already pinned
+      setLatitude(result.geoData.latitude);
+      setLongitude(result.geoData.longitude);
+      setGeoStatus('success');
+      setGeoMessage(
+        `GPS coordinates captured from live photo: ${formatCoordinates(result.geoData.latitude, result.geoData.longitude)} (±${Math.round(result.geoData.accuracy)}m)`
+      );
+
+      // If specificLocation is empty and reverse geocoded address is available, prefill suggestion
+      if (!specificLocation.trim() && result.geoData.address) {
+        setSpecificLocation(result.geoData.address.slice(0, 120));
+      }
+
+      const id = crypto.randomUUID();
+      const capturedRecord: UploadedImageFile = {
         id,
-        file,
-        previewUrl,
+        rawBlob: result.rawBlob,
+        stampedBlob: result.stampedBlob,
+        previewUrl: result.previewUrl,
+        fileName: `live_capture_${Date.now().toString().slice(-6)}.jpg`,
         quality,
         dHash,
         contentHash,
         reusedMatch,
-      });
+        screenCheck,
+        geo: result.geoData,
+        captureSessionId: session.id,
+      };
+
+      setImages((prev) => [...prev, capturedRecord]);
 
       // 4. Real Vision Model category classification (if configured)
       const hasKey = !!(settings.geminiApiKey?.trim() || (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim());
       if (hasKey && !visualResult) {
         try {
-          const vResult = await classifyImageWithVisionModel(file, settings.geminiApiKey);
+          const vResult = await classifyImageWithVisionModel(result.rawBlob, settings.geminiApiKey);
           setVisualResult(vResult);
           setVisualDismissed(false);
         } catch {
           // Graceful fallback
         }
       }
+    } catch (err: any) {
+      console.error('Failed to process live photo:', err);
+      setUploadError(err.message || 'Error processing live photograph.');
+    } finally {
+      setIsAnalyzingImage(false);
     }
-
-    setImages((prev) => [...prev, ...newUploaded]);
-    setIsAnalyzingImage(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleRemoveImage = (id: string) => {
@@ -286,28 +325,42 @@ export const ReportIssuePage: React.FC = () => {
     setValidationError(null);
 
     try {
-      // 1. Save uploaded images to IndexedDB with verification attributes
+      // 1. Save live captured images to IndexedDB with verification & geolocation attributes
       const imageIds: string[] = [];
       const qualityReports: ImageQualityReport[] = [];
       let topReusedMatch: ReusedPhotoMatch | null = null;
+      let detectedScreenPhoto: { isScreenPhoto: boolean; details?: string } | undefined;
 
       for (const img of images) {
         const imageRecord: ImageAsset = {
           id: img.id,
-          blob: img.file,
-          mimeType: img.file.type,
-          originalName: img.file.name,
-          size: img.file.size,
+          blob: img.rawBlob,
+          stampedBlob: img.stampedBlob,
+          mimeType: 'image/jpeg',
+          originalName: img.fileName,
+          size: img.rawBlob.size,
           createdAt: new Date().toISOString(),
           perceptualHash: img.dHash,
           contentHash: img.contentHash,
           quality: img.quality,
+          captureSessionId: img.captureSessionId,
+          latitude: img.geo?.latitude,
+          longitude: img.geo?.longitude,
+          accuracy: img.geo?.accuracy,
+          locationTimestamp: img.geo?.locationTimestamp,
+          clientCaptureTimestamp: img.geo?.clientCaptureTimestamp,
+          serverReceivedTimestamp: img.geo?.serverReceivedTimestamp,
+          address: img.geo?.address,
+          isLiveCapture: true,
         };
         await repository.saveImage(imageRecord);
         imageIds.push(img.id);
         if (img.quality) qualityReports.push(img.quality);
         if (img.reusedMatch && (!topReusedMatch || img.reusedMatch.similarityPercentage > topReusedMatch.similarityPercentage)) {
           topReusedMatch = img.reusedMatch;
+        }
+        if (img.screenCheck?.isScreenPhoto && !detectedScreenPhoto) {
+          detectedScreenPhoto = img.screenCheck;
         }
       }
 
@@ -320,6 +373,7 @@ export const ReportIssuePage: React.FC = () => {
         reusedMatch: topReusedMatch,
         qualityReports,
         categoryComparison,
+        screenCheck: detectedScreenPhoto,
       });
 
       const isSuspicious = suspiciousFlags.length > 0;
@@ -345,8 +399,17 @@ export const ReportIssuePage: React.FC = () => {
         suggestedCategory: suggestedCat || undefined,
         block,
         specificLocation: specificLocation.trim(),
-        latitude,
-        longitude,
+        latitude: latitude ?? images[0]?.geo?.latitude,
+        longitude: longitude ?? images[0]?.geo?.longitude,
+        captureLatitude: images[0]?.geo?.latitude,
+        captureLongitude: images[0]?.geo?.longitude,
+        captureAccuracy: images[0]?.geo?.accuracy,
+        captureLocationTimestamp: images[0]?.geo?.locationTimestamp,
+        captureClientTimestamp: images[0]?.geo?.clientCaptureTimestamp,
+        captureServerTimestamp: images[0]?.geo?.serverReceivedTimestamp,
+        captureSessionId: images[0]?.captureSessionId,
+        captureAddress: images[0]?.geo?.address,
+        isLiveCapture: images.length > 0,
         priority: requestUrgent ? 'Urgent' : 'Low',
         suggestedPriority: requestUrgent ? 'Urgent' : undefined,
         status: 'Submitted',
@@ -511,7 +574,24 @@ export const ReportIssuePage: React.FC = () => {
 
       {/* STEP 1: Issue Details */}
       {currentStep === 1 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5">
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOrPasteNotice(
+              'Direct file dropping is disabled. Please use "Take Live Photo" to capture live evidence with camera and GPS.'
+            );
+          }}
+          onPaste={(e) => {
+            if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+              e.preventDefault();
+              setDragOrPasteNotice(
+                'Pasting image files is disabled. Please use "Take Live Photo" to capture live evidence with camera and GPS.'
+              );
+            }
+          }}
+          className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5"
+        >
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
               Issue Title <span className="text-red-500">*</span>
@@ -635,37 +715,66 @@ export const ReportIssuePage: React.FC = () => {
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
-                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/50 text-white text-[9px] rounded truncate max-w-[80%]">
-                    {img.file.name}
+                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-mono rounded truncate max-w-[70%]">
+                    {img.fileName}
                   </span>
+                  {img.geo && (
+                    <span className="absolute top-1 right-8 px-1.5 py-0.5 bg-teal-900/80 text-teal-300 text-[9px] font-mono rounded flex items-center gap-1 shadow-xs">
+                      <MapPin className="w-2.5 h-2.5 text-teal-400" />
+                      <span>GPS</span>
+                    </span>
+                  )}
                 </div>
               ))}
 
               {images.length < 3 && (
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => setShowCameraModal(true)}
                   disabled={isAnalyzingImage}
-                  className="aspect-square rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-teal-50/30 flex flex-col items-center justify-center p-3 text-slate-500 hover:text-teal-800 transition-all cursor-pointer disabled:opacity-50"
+                  className="aspect-square rounded-xl border-2 border-dashed border-teal-600/40 hover:border-teal-700 hover:bg-teal-50/40 flex flex-col items-center justify-center p-3 text-teal-800 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <Upload className="w-6 h-6 mb-1 text-slate-400" />
-                  <span className="text-xs font-bold">Add Photo</span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, WebP</span>
+                  <Camera className="w-6 h-6 mb-1 text-teal-700" />
+                  <span className="text-xs font-bold">Take Live Photo</span>
+                  <span className="text-[10px] text-teal-600/90 mt-0.5">In-App Camera Only</span>
                 </button>
               )}
             </div>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
+            {/* In-App Camera Only Disclosure */}
+            <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
+              <ShieldAlert className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+              <span>
+                <strong>Camera & Geolocation Required:</strong> Photos must be captured live at the issue location. File picking, gallery selection, and drag-and-drop are disabled.
+              </span>
+            </div>
+
+            {/* Drag or Paste blocked feedback */}
+            {dragOrPasteNotice && (
+              <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 font-medium flex items-center justify-between">
+                <span>{dragOrPasteNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setDragOrPasteNotice(null)}
+                  className="text-amber-700 hover:text-amber-900 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Live Camera Modal */}
+            <LiveCameraModal
+              isOpen={showCameraModal}
+              onClose={() => setShowCameraModal(false)}
+              onPhotoCaptured={handlePhotoCaptured}
+              communityName={settings.name}
+              title="Capture Live Issue Photograph"
+              onEnterManually={() => {
+                setShowCameraModal(false);
+                setCurrentStep(2);
+              }}
             />
-            <p className="text-[11px] text-slate-400 mt-2">
-              Photos are analyzed locally for quality and duplicate reporting before saving to browser IndexedDB. Max 5 MB per file.
-            </p>
 
             {/* Quality Suggestions */}
             {images.some((img) => img.quality?.isDark || img.quality?.isBlurry) && (
