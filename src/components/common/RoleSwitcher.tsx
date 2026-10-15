@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import type { RoleType } from '../../types';
-import { Users, Shield, Wrench, ChevronDown, Check, AlertCircle, Plus, UserPlus } from 'lucide-react';
+import { Users, Shield, Wrench, ChevronDown, Check, AlertCircle, Plus, UserPlus, LogOut } from 'lucide-react';
 import { Modal } from './Modal';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,6 +15,7 @@ export const RoleSwitcher: React.FC = () => {
     settings,
     setRole,
     createResident,
+    logout,
   } = useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -322,6 +323,23 @@ export const RoleSwitcher: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Prototype Session Sign Out */}
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
+            <span className="text-xs text-slate-500">Finished testing session?</span>
+            <button
+              type="button"
+              onClick={() => {
+                setModalOpen(false);
+                logout();
+                navigate('/', { replace: true, state: { loggedOut: true, message: 'You have been logged out successfully.' } });
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out of Session</span>
+            </button>
           </div>
         </div>
       </Modal>

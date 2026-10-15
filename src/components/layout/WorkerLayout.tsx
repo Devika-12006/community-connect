@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { RoleSwitcher } from '../common/RoleSwitcher';
 import {
@@ -7,10 +7,17 @@ import {
   CheckCircle2,
   Bell,
   User,
+  LogOut,
 } from 'lucide-react';
 
 export const WorkerLayout: React.FC = () => {
-  const { activeWorker, unreadNotificationCount } = useApp();
+  const { activeWorker, unreadNotificationCount, logout } = useApp();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true, state: { loggedOut: true, message: 'You have been logged out successfully.' } });
+  };
 
   const navItems = [
     { to: '/worker/tasks', label: 'My Tasks', icon: Wrench },
@@ -44,7 +51,7 @@ export const WorkerLayout: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <RoleSwitcher />
             <Link
               to="/worker/notifications"
@@ -56,6 +63,16 @@ export const WorkerLayout: React.FC = () => {
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white" />
               )}
             </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-700 text-xs sm:text-sm font-medium transition-colors shadow-xs cursor-pointer"
+              title="Sign out of Worker Portal"
+              aria-label="Log out"
+            >
+              <LogOut className="w-4 h-4 shrink-0 text-slate-500 hover:text-red-600" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </div>
 

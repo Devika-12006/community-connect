@@ -1,15 +1,17 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import {
   Wrench,
   Phone,
   Users,
   Check,
+  LogOut,
 } from 'lucide-react';
 
 export const WorkerProfilePage: React.FC = () => {
-  const { activeWorker, workers, complaints, setRole } = useApp();
+  const { activeWorker, workers, complaints, setRole, logout } = useApp();
+  const navigate = useNavigate();
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -132,6 +134,28 @@ export const WorkerProfilePage: React.FC = () => {
             })}
           </div>
         )}
+      </div>
+
+      {/* Session & Security */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Session & Security</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            End your active technician session and return to the main landing page.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            logout();
+            navigate('/', { replace: true, state: { loggedOut: true, message: 'You have been logged out successfully.' } });
+          }}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          aria-label="Sign out of worker session"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
       </div>
     </div>
   );

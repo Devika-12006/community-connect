@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import {
   Camera,
@@ -13,12 +13,31 @@ import {
   Users,
   Wrench,
   Building,
+  LogOut,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { residents, workers, setRole, createResident, settings } = useApp();
+  const location = useLocation();
+  const {
+    residents,
+    workers,
+    login,
+    logout,
+    isAuthenticated,
+    currentRole,
+    createResident,
+    settings,
+  } = useApp();
+
+  const [dismissBanner, setDismissBanner] = useState(false);
+  const flashMessage = location.state?.message;
+  const isLoggedOut = location.state?.loggedOut;
+  const isUnauthorized = location.state?.unauthorized;
+
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showResidentSetup, setShowResidentSetup] = useState(false);
   const [resName, setResName] = useState('');
@@ -28,7 +47,7 @@ export const LandingPage: React.FC = () => {
 
   const handleStartReport = () => {
     if (residents.length > 0) {
-      setRole('Resident', residents[0].id);
+      login('Resident', residents[0].id);
       navigate('/resident/report');
     } else {
       setShowResidentSetup(true);
@@ -37,7 +56,7 @@ export const LandingPage: React.FC = () => {
 
   const handleTrackComplaints = () => {
     if (residents.length > 0) {
-      setRole('Resident', residents[0].id);
+      login('Resident', residents[0].id);
       navigate('/resident/complaints');
     } else {
       setShowResidentSetup(true);
@@ -57,12 +76,21 @@ export const LandingPage: React.FC = () => {
 
     try {
       const created = await createResident(resName.trim(), resBlock, resFlat.trim());
-      setRole('Resident', created.id);
+      login('Resident', created.id);
       setShowResidentSetup(false);
       navigate('/resident/home');
     } catch {
       setSetupError('Unable to save profile in local storage.');
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    setDismissBanner(false);
+    navigate('/', {
+      replace: true,
+      state: { loggedOut: true, message: 'You have been logged out successfully.' },
+    });
   };
 
   return (
@@ -83,16 +111,77 @@ export const LandingPage: React.FC = () => {
           </nav>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowRoleModal(true)}
-              className="px-4 py-2 rounded-lg bg-teal-800 hover:bg-teal-700 text-white text-sm font-semibold transition-all shadow-xs cursor-pointer"
-            >
-              Enter Prototype
-            </button>
+            {isAuthenticated ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentRole === 'Manager') navigate('/manager/overview');
+                    else if (currentRole === 'Worker') navigate('/worker/tasks');
+                    else navigate('/resident/home');
+                  }}
+                  className="px-4 py-2 rounded-lg bg-teal-800 hover:bg-teal-700 text-white text-sm font-semibold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Go to {currentRole} Portal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-700 text-sm font-medium transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                  aria-label="Log out of current session"
+                  title="Sign out of prototype session"
+                >
+                  <LogOut className="w-4 h-4 text-slate-500 hover:text-red-600" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(true)}
+                className="px-4 py-2 rounded-lg bg-teal-800 hover:bg-teal-700 text-white text-sm font-semibold transition-all shadow-xs cursor-pointer"
+              >
+                Enter Prototype
+              </button>
+            )}
           </div>
         </div>
       </header>
+
+      {/* Post-Logout / Status Banner */}
+      {flashMessage && !dismissBanner && (
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 w-full pt-4 animate-in fade-in duration-300">
+          <div
+            className={`p-4 rounded-xl border flex items-center justify-between gap-3 shadow-xs ${
+              isLoggedOut
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : isUnauthorized
+                ? 'bg-amber-50 border-amber-200 text-amber-900'
+                : 'bg-blue-50 border-blue-200 text-blue-900'
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-center gap-3">
+              {isLoggedOut ? (
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+              )}
+              <span className="text-sm font-semibold">{flashMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissBanner(true)}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-black/5 cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-12 pb-16 sm:pt-20 sm:pb-24 bg-gradient-to-b from-teal-50/50 via-white to-slate-50 border-b border-slate-200">
@@ -280,7 +369,7 @@ export const LandingPage: React.FC = () => {
               onClick={() => {
                 setShowRoleModal(false);
                 if (residents.length > 0) {
-                  setRole('Resident', residents[0].id);
+                  login('Resident', residents[0].id);
                   navigate('/resident/home');
                 } else {
                   setShowResidentSetup(true);
@@ -301,7 +390,7 @@ export const LandingPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setShowRoleModal(false);
-                setRole('Manager');
+                login('Manager');
                 navigate('/manager/overview');
               }}
               className="w-full p-4 rounded-xl border border-slate-200 hover:border-teal-600 bg-white hover:bg-teal-50/40 text-left transition-all flex items-center gap-3 cursor-pointer"
@@ -320,10 +409,10 @@ export const LandingPage: React.FC = () => {
               onClick={() => {
                 setShowRoleModal(false);
                 if (workers.length > 0) {
-                  setRole('Worker', undefined, workers[0].id);
+                  login('Worker', undefined, workers[0].id);
                   navigate('/worker/tasks');
                 } else {
-                  setRole('Manager');
+                  login('Manager');
                   navigate('/manager/workers');
                 }
               }}

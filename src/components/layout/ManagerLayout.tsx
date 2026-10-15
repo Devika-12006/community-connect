@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { RoleSwitcher } from '../common/RoleSwitcher';
 import {
@@ -12,12 +12,19 @@ import {
   Menu,
   X,
   Building2,
+  LogOut,
 } from 'lucide-react';
 
 export const ManagerLayout: React.FC = () => {
-  const { settings, unreadNotificationCount } = useApp();
+  const { settings, unreadNotificationCount, logout } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true, state: { loggedOut: true, message: 'You have been logged out successfully.' } });
+  };
 
   const navItems = [
     { to: '/manager/overview', label: 'Overview', icon: LayoutDashboard },
@@ -104,6 +111,19 @@ export const ManagerLayout: React.FC = () => {
           })}
         </nav>
 
+        {/* Sidebar Logout Button */}
+        <div className="p-3 border-t border-teal-900/60">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-teal-200 hover:bg-red-500/20 hover:text-red-300 transition-colors cursor-pointer"
+            aria-label="Log out of manager workspace"
+          >
+            <LogOut className="w-4 h-4 shrink-0 text-teal-300" />
+            <span>Logout</span>
+          </button>
+        </div>
+
         {/* Sidebar Footer Notice */}
         <div className="p-4 border-t border-teal-900/40 text-[11px] text-teal-400/70">
           Simulated management portal. Changes persist to local IndexedDB.
@@ -126,7 +146,7 @@ export const ManagerLayout: React.FC = () => {
             <h1 className="text-base sm:text-lg font-bold text-slate-800">{getPageTitle()}</h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <RoleSwitcher />
             <Link
               to="/manager/notifications"
@@ -138,6 +158,16 @@ export const ManagerLayout: React.FC = () => {
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-600 ring-2 ring-white" />
               )}
             </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-700 text-xs sm:text-sm font-medium transition-colors shadow-xs cursor-pointer"
+              title="Sign out of Manager Workspace"
+              aria-label="Log out"
+            >
+              <LogOut className="w-4 h-4 shrink-0 text-slate-500 hover:text-red-600" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </header>
 
