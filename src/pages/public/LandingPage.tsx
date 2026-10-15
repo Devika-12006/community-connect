@@ -16,6 +16,7 @@ import {
   LogOut,
   AlertCircle,
   X,
+  Plus,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 
@@ -40,26 +41,27 @@ export const LandingPage: React.FC = () => {
 
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showResidentSetup, setShowResidentSetup] = useState(false);
+  const [targetRoute, setTargetRoute] = useState<string | null>(null);
   const [resName, setResName] = useState('');
   const [resBlock, setResBlock] = useState(settings.blocks[0] || 'Block A');
   const [resFlat, setResFlat] = useState('');
   const [setupError, setSetupError] = useState('');
 
   const handleStartReport = () => {
-    if (residents.length > 0) {
-      login('Resident', residents[0].id);
+    if (isAuthenticated) {
       navigate('/resident/report');
     } else {
-      setShowResidentSetup(true);
+      setTargetRoute('/resident/report');
+      setShowRoleModal(true);
     }
   };
 
   const handleTrackComplaints = () => {
-    if (residents.length > 0) {
-      login('Resident', residents[0].id);
+    if (isAuthenticated) {
       navigate('/resident/complaints');
     } else {
-      setShowResidentSetup(true);
+      setTargetRoute('/resident/complaints');
+      setShowRoleModal(true);
     }
   };
 
@@ -78,7 +80,7 @@ export const LandingPage: React.FC = () => {
       const created = await createResident(resName.trim(), resBlock, resFlat.trim());
       login('Resident', created.id);
       setShowResidentSetup(false);
-      navigate('/resident/home');
+      navigate(targetRoute || '/resident/home');
     } catch {
       setSetupError('Unable to save profile in local storage.');
     }
@@ -139,10 +141,13 @@ export const LandingPage: React.FC = () => {
             ) : (
               <button
                 type="button"
-                onClick={() => setShowRoleModal(true)}
+                onClick={() => {
+                  setTargetRoute(null);
+                  setShowRoleModal(true);
+                }}
                 className="px-4 py-2 rounded-lg bg-teal-800 hover:bg-teal-700 text-white text-sm font-semibold transition-all shadow-xs cursor-pointer"
               >
-                Enter Prototype
+                Sign In / Select Role
               </button>
             )}
           </div>
@@ -351,83 +356,170 @@ export const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      {/* Role Selection Modal */}
+      {/* Account & Role Selection Modal */}
       <Modal
         isOpen={showRoleModal}
-        onClose={() => setShowRoleModal(false)}
-        title="Enter Prototype"
+        onClose={() => {
+          setShowRoleModal(false);
+          setTargetRoute(null);
+        }}
+        title="Sign In to Community Connect"
         maxWidth="md"
       >
         <div className="space-y-4">
           <p className="text-xs text-slate-600">
-            Select a role to explore the prototype. You can switch roles at any time using the prototype switcher in the top bar.
+            Select an account to sign in. Each resident and worker profile maintains their own complaints and task history.
           </p>
 
-          <div className="space-y-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setShowRoleModal(false);
-                if (residents.length > 0) {
-                  login('Resident', residents[0].id);
-                  navigate('/resident/home');
-                } else {
-                  setShowResidentSetup(true);
-                }
-              }}
-              className="w-full p-4 rounded-xl border border-slate-200 hover:border-teal-600 bg-white hover:bg-teal-50/40 text-left transition-all flex items-center gap-3 cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-                <Users className="w-5 h-5" />
+          <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+            {/* 1. Resident Portal Account Selection */}
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Resident Portal</div>
+                    <div className="text-[11px] text-slate-500">Report issues, track progress, rate repairs</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRoleModal(false);
+                    setShowResidentSetup(true);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>New Profile</span>
+                </button>
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-bold text-slate-900">Resident Portal</div>
-                <div className="text-xs text-slate-500">Report issues, track progress, rate service</div>
-              </div>
-            </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowRoleModal(false);
-                login('Manager');
-                navigate('/manager/overview');
-              }}
-              className="w-full p-4 rounded-xl border border-slate-200 hover:border-teal-600 bg-white hover:bg-teal-50/40 text-left transition-all flex items-center gap-3 cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-lg bg-teal-700 text-white flex items-center justify-center shrink-0">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-bold text-slate-900">Community Manager Workspace</div>
-                <div className="text-xs text-slate-500">Triage reports, assign workers, reports & settings</div>
-              </div>
-            </button>
+              {residents.length === 0 ? (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
+                  <span>No resident profiles exist yet.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRoleModal(false);
+                      setShowResidentSetup(true);
+                    }}
+                    className="font-bold text-teal-800 hover:underline"
+                  >
+                    Create Resident &rarr;
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Sign in as Resident:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {residents.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setShowRoleModal(false);
+                          login('Resident', r.id);
+                          navigate(targetRoute || '/resident/home');
+                        }}
+                        className="p-2.5 rounded-lg border border-slate-200 hover:border-teal-600 bg-slate-50/60 hover:bg-teal-50 text-left transition-all flex items-center justify-between cursor-pointer group"
+                      >
+                        <div className="truncate pr-2">
+                          <div className="text-xs font-bold text-slate-800 group-hover:text-teal-900 truncate">
+                            {r.displayName}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {r.block} • Flat {r.flatNumber}
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowRoleModal(false);
-                if (workers.length > 0) {
-                  login('Worker', undefined, workers[0].id);
-                  navigate('/worker/tasks');
-                } else {
-                  login('Manager');
-                  navigate('/manager/workers');
-                }
-              }}
-              className="w-full p-4 rounded-xl border border-slate-200 hover:border-teal-600 bg-white hover:bg-teal-50/40 text-left transition-all flex items-center gap-3 cursor-pointer"
-            >
-              <div className="w-10 h-10 rounded-lg bg-amber-600 text-white flex items-center justify-center shrink-0">
-                <Wrench className="w-5 h-5" />
+            {/* 2. Community Manager Workspace */}
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-teal-800 text-white flex items-center justify-center font-bold text-xs">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Community Manager Workspace</div>
+                    <div className="text-[11px] text-slate-500">Triage reports, assign workers, oversee community analytics</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRoleModal(false);
+                    login('Manager');
+                    navigate('/manager/overview');
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-teal-800 hover:bg-teal-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                >
+                  Sign In &rarr;
+                </button>
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-bold text-slate-900">Maintenance Worker Portal</div>
-                <div className="text-xs text-slate-500">
-                  {workers.length > 0 ? 'Execute assigned tasks & upload proof' : 'Requires worker creation from Manager portal first'}
+            </div>
+
+            {/* 3. Maintenance Worker Portal */}
+            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">Maintenance Worker Portal</div>
+                    <div className="text-[11px] text-slate-500">View assigned tasks, update repair progress & upload proof</div>
+                  </div>
                 </div>
               </div>
-            </button>
+
+              {workers.length === 0 ? (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                  No technician accounts exist. Create a worker profile from the Manager portal.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Sign in as Technician:
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {workers.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => {
+                          setShowRoleModal(false);
+                          login('Worker', undefined, w.id);
+                          navigate('/worker/tasks');
+                        }}
+                        className="p-2.5 rounded-lg border border-slate-200 hover:border-amber-600 bg-slate-50/60 hover:bg-amber-50 text-left transition-all flex items-center justify-between cursor-pointer group"
+                      >
+                        <div className="truncate pr-2">
+                          <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900 truncate">
+                            {w.name}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            Specialty: {w.specialty}
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </Modal>
