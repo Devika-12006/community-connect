@@ -54,10 +54,56 @@ export interface CommunityConnectDB extends DBSchema {
     value: ImageAsset;
     indexes: { 'by-complaint': string };
   };
+  organizations: {
+    key: string;
+    value: import('../types').Organization;
+    indexes: { 'by-active': number };
+  };
+  contacts: {
+    key: string;
+    value: import('../types').Contact;
+    indexes: {
+      'by-org': string;
+      'by-verified': number;
+      'by-active': number;
+      'by-department': string;
+    };
+  };
+  group_messages: {
+    key: string;
+    value: import('../types').AuthorizedGroupMessage;
+    indexes: {
+      'by-org': string;
+      'by-permission': string;
+      'by-timestamp': string;
+    };
+  };
+  assignments: {
+    key: string;
+    value: import('../types').ComplaintAssignmentRecord;
+    indexes: {
+      'by-complaint': string;
+      'by-contact': string;
+      'by-org': string;
+    };
+  };
+  audit_logs: {
+    key: string;
+    value: import('../types').AuditLogEntry;
+    indexes: {
+      'by-org': string;
+      'by-action': string;
+      'by-record': string;
+    };
+  };
+  integration_config: {
+    key: string;
+    value: import('../types').WhatsAppIntegrationConfig;
+  };
 }
 
 const DB_NAME = 'community_connect_v2_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<CommunityConnectDB>> | null = null;
 
@@ -103,6 +149,45 @@ export function getDatabase(): Promise<IDBPDatabase<CommunityConnectDB>> {
         if (!db.objectStoreNames.contains('images')) {
           const store = db.createObjectStore('images', { keyPath: 'id' });
           store.createIndex('by-complaint', 'complaintId');
+        }
+
+        // --- New stores for AI Complaint Routing Agent ---
+        if (!db.objectStoreNames.contains('organizations')) {
+          const store = db.createObjectStore('organizations', { keyPath: 'id' });
+          store.createIndex('by-active', 'active');
+        }
+
+        if (!db.objectStoreNames.contains('contacts')) {
+          const store = db.createObjectStore('contacts', { keyPath: 'id' });
+          store.createIndex('by-org', 'organizationId');
+          store.createIndex('by-verified', 'verified');
+          store.createIndex('by-active', 'active');
+          store.createIndex('by-department', 'department');
+        }
+
+        if (!db.objectStoreNames.contains('group_messages')) {
+          const store = db.createObjectStore('group_messages', { keyPath: 'id' });
+          store.createIndex('by-org', 'organizationId');
+          store.createIndex('by-permission', 'permissionStatus');
+          store.createIndex('by-timestamp', 'messageTimestamp');
+        }
+
+        if (!db.objectStoreNames.contains('assignments')) {
+          const store = db.createObjectStore('assignments', { keyPath: 'id' });
+          store.createIndex('by-complaint', 'complaintId');
+          store.createIndex('by-contact', 'contactId');
+          store.createIndex('by-org', 'organizationId');
+        }
+
+        if (!db.objectStoreNames.contains('audit_logs')) {
+          const store = db.createObjectStore('audit_logs', { keyPath: 'id' });
+          store.createIndex('by-org', 'organizationId');
+          store.createIndex('by-action', 'action');
+          store.createIndex('by-record', 'recordId');
+        }
+
+        if (!db.objectStoreNames.contains('integration_config')) {
+          db.createObjectStore('integration_config', { keyPath: 'id' });
         }
       },
     });

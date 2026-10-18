@@ -651,6 +651,18 @@ export const ManagerComplaintsPage: React.FC = () => {
                     <td className="p-3.5 font-mono font-bold text-slate-900">
                       <div className="space-y-1">
                         <span>{c.reference}</span>
+                        {c.source && (c.source === 'WhatsApp' || c.source === 'Mock WhatsApp') && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded w-fit">
+                              WhatsApp
+                            </span>
+                            {c.matchScore !== undefined && (
+                              <span className="text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1 py-0.2 rounded">
+                                {c.matchScore}%
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {c.isSuspicious && !c.dismissedSuspiciousFlags && (
                           <div className="text-[9px] font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.2 rounded w-fit flex items-center gap-1">
                             <AlertTriangle className="w-2.5 h-2.5" />
@@ -809,6 +821,65 @@ export const ManagerComplaintsPage: React.FC = () => {
                   {selectedComplaint.description}
                 </p>
               </div>
+
+              {/* AI Complaint Intake & Routing Details */}
+              {(selectedComplaint.source === 'WhatsApp' ||
+                selectedComplaint.source === 'Mock WhatsApp' ||
+                selectedComplaint.matchScore !== undefined) && (
+                <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
+                    <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>AI WhatsApp Intake & Routing Rationale</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        {selectedComplaint.source || 'WhatsApp'}
+                      </span>
+                      {selectedComplaint.matchScore !== undefined && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white text-emerald-900 border border-emerald-300">
+                          {selectedComplaint.matchScore}% Match
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedComplaint.reporterPhone && (
+                    <div className="text-[11px] text-emerald-800">
+                      <span className="font-semibold">WhatsApp Sender: </span>
+                      <span className="font-mono">{selectedComplaint.reporterPhone}</span>
+                    </div>
+                  )}
+
+                  {selectedComplaint.matchReason && (
+                    <div className="text-[11px] text-emerald-900 leading-relaxed bg-white/80 p-2.5 rounded-lg border border-emerald-200">
+                      <span className="font-bold block mb-0.5">Scoring Engine Rationale:</span>
+                      {selectedComplaint.matchReason}
+                    </div>
+                  )}
+
+                  {selectedComplaint.needsClarification && selectedComplaint.clarificationQuestion && (
+                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px]">
+                      <span className="font-bold">Missing Details Prompt: </span>
+                      {selectedComplaint.clarificationQuestion}
+                    </div>
+                  )}
+
+                  {selectedComplaint.supportingMessageEvidence && (
+                    <div className="text-[11px] text-indigo-900 space-y-1 bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-200">
+                      <span className="font-bold block">Cross-Referenced Authorized Notices:</span>
+                      <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
+                        {(Array.isArray(selectedComplaint.supportingMessageEvidence)
+                          ? selectedComplaint.supportingMessageEvidence
+                          : [selectedComplaint.supportingMessageEvidence]
+                        ).map((ev: string, idx: number) => (
+                          <li key={idx}>{ev}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
                 <span className="flex items-center gap-1.5">

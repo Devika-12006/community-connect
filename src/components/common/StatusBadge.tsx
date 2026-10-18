@@ -64,6 +64,12 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md', s
       label: 'Reopened',
       fullLabel: 'Reopened by Resident',
     },
+    Pending: {
+      bg: 'bg-amber-50 border-amber-300 text-amber-800',
+      icon: Clock,
+      label: 'Pending',
+      fullLabel: 'Pending Triage',
+    },
   };
 
   const statusConfig = config[status] || config.Submitted;

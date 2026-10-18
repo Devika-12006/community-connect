@@ -137,12 +137,70 @@ function captureSessionApiPlugin(): Plugin {
   };
 }
 
+function whatsappWebhookPlugin(): Plugin {
+  return {
+    name: 'whatsapp-webhook-api',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith('/api/whatsapp/webhook')) {
+          return next();
+        }
+
+        const url = new URL(req.url, 'http://localhost');
+
+        // 1. Meta Webhook Verification Handshake (GET)
+        if (req.method === 'GET') {
+          const mode = url.searchParams.get('hub.mode');
+          const token = url.searchParams.get('hub.verify_token');
+          const challenge = url.searchParams.get('hub.challenge');
+
+          const expectedToken = process.env.VITE_WHATSAPP_VERIFY_TOKEN || 'community_connect_verify_token';
+
+          if (mode === 'subscribe' && (token === expectedToken || !expectedToken)) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/plain');
+            res.end(challenge || '');
+            return;
+          }
+
+          res.statusCode = 403;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Verification token mismatch' }));
+          return;
+        }
+
+        // 2. Meta WhatsApp Incoming Messages Webhook (POST)
+        if (req.method === 'POST') {
+          let body = '';
+          req.on('data', (chunk) => (body += chunk));
+          req.on('end', () => {
+            try {
+              const payload = body ? JSON.parse(body) : {};
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ status: 'received', messageCount: payload?.entry?.length || 0 }));
+            } catch (err: any) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+            }
+          });
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), captureSessionApiPlugin()],
+  plugins: [react(), tailwindcss(), captureSessionApiPlugin(), whatsappWebhookPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
 })
+

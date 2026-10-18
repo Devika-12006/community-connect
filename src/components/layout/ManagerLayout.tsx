@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { RoleSwitcher } from '../common/RoleSwitcher';
+import { WhatsAppSimulatorModal } from '../whatsapp/WhatsAppSimulatorModal';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -13,11 +14,16 @@ import {
   X,
   Building2,
   LogOut,
+  Bot,
+  BookUser,
+  MessageSquare,
+  Sliders,
 } from 'lucide-react';
 
 export const ManagerLayout: React.FC = () => {
-  const { settings, unreadNotificationCount, logout } = useApp();
+  const { settings, unreadNotificationCount, logout, refreshAll } = useApp();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -28,9 +34,13 @@ export const ManagerLayout: React.FC = () => {
 
   const navItems = [
     { to: '/manager/overview', label: 'Overview', icon: LayoutDashboard },
+    { to: '/manager/ai-agent', label: 'AI Complaint Agent', icon: Bot, isNew: true },
     { to: '/manager/complaints', label: 'Complaints', icon: ClipboardList },
+    { to: '/manager/contacts', label: 'Contact Directory', icon: BookUser },
+    { to: '/manager/group-messages', label: 'Group Notices', icon: MessageSquare },
     { to: '/manager/workers', label: 'Workers', icon: Users },
     { to: '/manager/reports', label: 'Reports & Analytics', icon: BarChart3 },
+    { to: '/manager/integrations', label: 'AI & WhatsApp Settings', icon: Sliders },
     { to: '/manager/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -97,15 +107,22 @@ export const ManagerLayout: React.FC = () => {
                 to={item.to}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'bg-teal-700 text-white shadow-xs font-semibold'
                       : 'text-teal-200 hover:bg-teal-900/60 hover:text-white'
                   }`
                 }
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{item.label}</span>
+                </div>
+                {item.isNew && (
+                  <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500 text-emerald-950 uppercase tracking-wider">
+                    AI
+                  </span>
+                )}
               </NavLink>
             );
           })}
@@ -147,6 +164,17 @@ export const ManagerLayout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Quick WhatsApp Simulator trigger in top bar */}
+            <button
+              type="button"
+              onClick={() => setIsSimulatorOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              title="Launch WhatsApp Complaint Simulator"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">WhatsApp Simulator</span>
+            </button>
+
             <RoleSwitcher />
             <Link
               to="/manager/notifications"
@@ -176,6 +204,15 @@ export const ManagerLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Simulator Modal */}
+      <WhatsAppSimulatorModal
+        isOpen={isSimulatorOpen}
+        onClose={() => {
+          setIsSimulatorOpen(false);
+          refreshAll();
+        }}
+      />
     </div>
   );
 };

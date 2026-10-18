@@ -285,6 +285,11 @@ export const ComplaintDetailsPage: React.FC = () => {
                 {complaint.category}
               </span>
               <PriorityBadge priority={complaint.priority} />
+              {complaint.source && (complaint.source === 'WhatsApp' || complaint.source === 'Mock WhatsApp') && (
+                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded">
+                  WhatsApp
+                </span>
+              )}
             </div>
             <h1 className="text-lg sm:text-xl font-black text-slate-900">{complaint.title}</h1>
           </div>
@@ -293,6 +298,20 @@ export const ComplaintDetailsPage: React.FC = () => {
             <StatusBadge status={complaint.status} size="lg" showFullLabel />
           </div>
         </div>
+
+        {complaint.matchReason && (
+          <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>AI Dispatch & Verification Note:</span>
+              {complaint.matchScore !== undefined && (
+                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-mono text-[10px]">
+                  {complaint.matchScore}% confidence
+                </span>
+              )}
+            </div>
+            <p className="text-emerald-800 leading-relaxed">{complaint.matchReason}</p>
+          </div>
+        )}
 
         {/* Location & Metadata Bar */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-600">

@@ -22,6 +22,10 @@ import { ManagerComplaintsPage } from './pages/manager/ManagerComplaintsPage';
 import { ManagerWorkersPage } from './pages/manager/ManagerWorkersPage';
 import { ManagerReportsPage } from './pages/manager/ManagerReportsPage';
 import { ManagerSettingsPage } from './pages/manager/ManagerSettingsPage';
+import { AIAgentDashboardPage } from './pages/manager/AIAgentDashboardPage';
+import { ContactDirectoryPage } from './pages/manager/ContactDirectoryPage';
+import { GroupMessagesPage } from './pages/manager/GroupMessagesPage';
+import { IntegrationSettingsPage } from './pages/manager/IntegrationSettingsPage';
 
 // Worker Pages
 import { WorkerTasksPage } from './pages/worker/WorkerTasksPage';
@@ -63,9 +67,13 @@ function App() {
             <Route path="/manager" element={<ManagerLayout />}>
               <Route index element={<Navigate to="/manager/overview" replace />} />
               <Route path="overview" element={<ManagerOverviewPage />} />
+              <Route path="ai-agent" element={<AIAgentDashboardPage />} />
               <Route path="complaints" element={<ManagerComplaintsPage />} />
+              <Route path="contacts" element={<ContactDirectoryPage />} />
+              <Route path="group-messages" element={<GroupMessagesPage />} />
               <Route path="workers" element={<ManagerWorkersPage />} />
               <Route path="reports" element={<ManagerReportsPage />} />
+              <Route path="integrations" element={<IntegrationSettingsPage />} />
               <Route path="settings" element={<ManagerSettingsPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
             </Route>

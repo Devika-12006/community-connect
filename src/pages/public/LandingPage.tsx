@@ -17,8 +17,10 @@ import {
   AlertCircle,
   X,
   Plus,
+  MessageSquare,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
+import { WhatsAppSimulatorModal } from '../../components/whatsapp/WhatsAppSimulatorModal';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -41,6 +43,7 @@ export const LandingPage: React.FC = () => {
 
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showResidentSetup, setShowResidentSetup] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
   const [targetRoute, setTargetRoute] = useState<string | null>(null);
   const [resName, setResName] = useState('');
   const [resBlock, setResBlock] = useState(settings.blocks[0] || 'Block A');
@@ -204,13 +207,22 @@ export const LandingPage: React.FC = () => {
             Report maintenance issues, follow updates, and help your community resolve problems faster.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-xl mx-auto">
+            <button
+              type="button"
+              onClick={() => setShowSimulator(true)}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>WhatsApp AI Hotline</span>
+            </button>
+
             <button
               type="button"
               onClick={handleStartReport}
               className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-teal-800 hover:bg-teal-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Report an Issue</span>
+              <span>Web Issue Report</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -596,6 +608,12 @@ export const LandingPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* WhatsApp Complaint Simulator Modal */}
+      <WhatsAppSimulatorModal
+        isOpen={showSimulator}
+        onClose={() => setShowSimulator(false)}
+      />
     </div>
   );
 };

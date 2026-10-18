@@ -27,7 +27,8 @@ export type ComplaintStatus =
   | 'Resolved'
   | 'Closed'
   | 'Rejected'
-  | 'Reopened';
+  | 'Reopened'
+  | 'Pending';
 
 export const COMPLAINT_STATUSES: ComplaintStatus[] = [
   'Submitted',
@@ -38,9 +39,11 @@ export const COMPLAINT_STATUSES: ComplaintStatus[] = [
   'Closed',
   'Rejected',
   'Reopened',
+  'Pending',
 ];
 
 export type ComplaintPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type UrgencyLevel = 'Low' | 'Medium' | 'High' | 'Urgent' | 'Emergency';
 
 export const COMPLAINT_PRIORITIES: ComplaintPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
 
@@ -144,6 +147,33 @@ export interface Complaint {
   completionDistanceToIssueMeters?: number;
   completionLocationDiscrepancy?: boolean;
   completionLocationDetails?: string;
+  // AI WhatsApp Routing Extension
+  organizationId?: string;
+  source?: 'web' | 'whatsapp' | 'WhatsApp' | 'Mock WhatsApp' | 'Web' | string;
+  externalMessageId?: string;
+  reporterPhone?: string;
+  aiExtractedUrgency?: 'Low' | 'Medium' | 'High' | 'Urgent' | 'Emergency';
+  recommendedContactId?: string;
+  recommendedContactName?: string;
+  matchScore?: number;
+  matchReason?: string;
+  supportingMessageEvidence?: string | string[];
+  needsClarification?: boolean;
+  clarificationQuestion?: string;
+  routingStatus?:
+    | 'Auto-Matched'
+    | 'Needs Clarification'
+    | 'Awaiting Confirmation'
+    | 'Routed'
+    | 'Manual Required'
+    | 'Auto-Routed'
+    | 'Recommended'
+    | 'Requires Review';
+  location?: string;
+  urgency?: UrgencyLevel | string;
+  priorityRank?: number;
+  verificationAttempts?: any[];
+  escalated?: boolean;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
@@ -212,6 +242,7 @@ export interface StampedImageRecord {
 }
 
 export type ComplaintEventType =
+  | 'Created'
   | 'Submitted'
   | 'UnderReview'
   | 'Assigned'
@@ -277,3 +308,252 @@ export interface ImageAsset {
   address?: string;
   isLiveCapture?: boolean;
 }
+
+// --- Organizations & Memberships ---
+export interface Organization {
+  id: string;
+  name: string;
+  organizationType: 'RWA' | 'Municipal Corporation' | 'Maintenance Agency' | 'Facility Management' | 'Other';
+  serviceAreas: string[];
+  active: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface OrganizationMembership {
+  id: string;
+  organizationId: string;
+  userId: string;
+  role: 'Admin' | 'Dispatcher' | 'Viewer';
+  createdAt: string;
+}
+
+// --- Contact Directory ---
+export interface Contact {
+  id: string;
+  organizationId: string;
+  name: string;
+  role: string; // e.g. "Lead Electrician", "Sanitation Supervisor", "Ward Officer"
+  department: string; // e.g. "Electrical", "Water & Sanitation", "Civil Works"
+  phoneNumber: string;
+  email?: string;
+  categories: ComplaintCategory[];
+  serviceAreas: string[]; // Blocks or Ward numbers
+  verified: boolean;
+  active: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Authorized Group Messages ---
+export interface AuthorizedGroupMessage {
+  id: string;
+  organizationId: string;
+  sourceName: string; // e.g. "Block A Residents Noticeboard", "Maintenance Alert Group"
+  sourceType: 'WhatsApp Community' | 'Telegram Official' | 'Admin Notice' | 'Exported CSV' | 'Direct Import' | string;
+  messageText: string;
+  messageTimestamp: string;
+  permissionStatus: 'Authorized' | 'Pending Review' | 'Revoked';
+  importedBy: string;
+  categoryTag?: ComplaintCategory;
+  locationTag?: string;
+  createdAt: string;
+}
+
+// --- AI Complaint Understanding & Analysis ---
+export interface AIComplaintAnalysis {
+  category: ComplaintCategory;
+  confidence: number; // 0 to 1
+  description: string;
+  summary?: string;
+  location: string;
+  urgency: UrgencyLevel | 'Urgent';
+  language?: string;
+  needsClarification: boolean;
+  clarificationQuestion?: string;
+  missingDetails?: string[];
+  rawSummary?: string;
+  isAiGenerated?: boolean;
+  modelUsed?: string;
+  extractedKeywords?: string[];
+  keywords?: string[];
+  sentiment?: string;
+  reasoning?: string;
+}
+
+// --- Contact Matching Engine ---
+export interface ContactMatchScore {
+  contactId?: string;
+  contactName?: string;
+  contactRole?: string;
+  department?: string;
+  contact?: Contact;
+  totalScore: number; // 0 to 100
+  breakdown: {
+    categoryScore?: number;
+    locationScore?: number;
+    roleScore?: number;
+    evidenceScore?: number;
+    categoryMatch?: number; // Max 40%
+    locationMatch?: number; // Max 30%
+    roleResponsibilityMatch?: number; // Max 20%
+    messageEvidenceMatch?: number; // Max 10%
+  };
+  explanation?: string;
+  reason?: string;
+  supportingEvidence?: string[];
+  supportingMessages?: AuthorizedGroupMessage[];
+}
+
+export interface ComplaintAssignmentRecord {
+  id: string;
+  complaintId: string;
+  organizationId: string;
+  contactId: string;
+  contactName?: string;
+  matchScore: number;
+  matchReason: string;
+  supportingEvidence?: string | string[];
+  assignmentStatus:
+    | 'Pending Confirmation'
+    | 'Confirmed'
+    | 'Dispatched'
+    | 'Acknowledged'
+    | 'Rejected'
+    | 'Auto-Assigned'
+    | 'Suggested'
+    | 'Manager-Assigned';
+  assignedBy: string; // 'AI Router' or User Name
+  candidateRank?: number;
+  breakdown?: {
+    categoryScore: number;
+    locationScore: number;
+    roleScore: number;
+    evidenceScore: number;
+  };
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// --- Audit Logging ---
+export interface AuditLogEntry {
+  id: string;
+  organizationId: string;
+  actorId: string;
+  actorRole?: string;
+  actorName?: string;
+  action:
+    | 'CONTACT_CREATED'
+    | 'CONTACT_VERIFIED'
+    | 'CONTACT_DEACTIVATED'
+    | 'MESSAGES_IMPORTED'
+    | 'AI_CLASSIFIED'
+    | 'CONTACT_MATCHED'
+    | 'COMPLAINT_ROUTED'
+    | 'ASSIGNMENT_CONFIRMED'
+    | 'STATUS_CHANGED'
+    | 'SETTINGS_UPDATED'
+    | 'VERIFY_CONTACT'
+    | 'UNVERIFY_CONTACT'
+    | 'ACTIVATE_CONTACT'
+    | 'DEACTIVATE_CONTACT'
+    | 'IMPORT_CONTACTS_CSV'
+    | 'DELETE_GROUP_MESSAGE'
+    | 'IMPORT_GROUP_MESSAGES_CSV'
+    | 'ROUTED_COMPLAINT'
+    | 'REASSIGN_CONTACT'
+    | 'UPDATE_INTEGRATION_SETTINGS'
+    | string;
+  recordType:
+    | 'Contact'
+    | 'Complaint'
+    | 'GroupMessage'
+    | 'Assignment'
+    | 'Setting'
+    | 'CONTACT'
+    | 'COMPLAINT'
+    | 'GROUP_MESSAGE'
+    | 'INTEGRATION_CONFIG'
+    | string;
+  recordId: string;
+  details: string | Record<string, any>;
+  createdAt: string;
+}
+
+// --- WhatsApp Integration Models ---
+export interface WhatsAppIncomingMessage {
+  messageId: string;
+  fromPhoneNumber: string;
+  senderName?: string;
+  text: string;
+  timestamp: string;
+  hasMedia?: boolean;
+  mediaUrl?: string;
+  rawPayload?: any;
+}
+
+export interface WhatsAppOutgoingReply {
+  id?: string;
+  toPhoneNumber?: string;
+  toPhone?: string;
+  text?: string;
+  messageText?: string;
+  complaintReference?: string;
+  timestamp: string;
+  status: 'Simulated' | 'Sent' | 'Delivered' | 'Failed';
+  error?: string;
+}
+
+export interface WhatsAppIntegrationConfig {
+  id: string;
+  enabled: boolean;
+  mode?: 'simulator' | 'meta_cloud_api';
+  aiProvider?: 'local' | 'openai';
+  phoneNumberId?: string;
+  businessAccountId?: string;
+  verifyToken?: string;
+  whatsappVerifyToken?: string;
+  accessToken?: string;
+  appSecret?: string;
+  apiVersion?: string;
+  webhookUrl?: string;
+  openAiApiKey?: string;
+  openaiApiKey?: string;
+  openAiModel?: string;
+  aiModel?: string;
+  minConfidenceThreshold?: number;
+  minimumConfidenceThreshold?: number;
+  autoRoutingEnabled?: boolean;
+  autoRoutingThreshold?: number;
+  requireAdminConfirmation?: boolean;
+  defaultOrganizationId?: string;
+  updatedAt: string;
+}
+
+export const DEFAULT_INTEGRATION_CONFIG: WhatsAppIntegrationConfig = {
+  id: 'default-integration-config',
+  enabled: true,
+  mode: 'simulator',
+  aiProvider: 'local',
+  phoneNumberId: '',
+  businessAccountId: '',
+  verifyToken: 'community_connect_verify_token',
+  whatsappVerifyToken: 'community_connect_verify_token',
+  accessToken: '',
+  appSecret: '',
+  apiVersion: 'v21.0',
+  webhookUrl: 'http://localhost:5173/api/whatsapp/webhook',
+  openAiApiKey: '',
+  openaiApiKey: '',
+  openAiModel: 'gpt-4o-mini',
+  aiModel: 'gpt-4o-mini',
+  minConfidenceThreshold: 40,
+  minimumConfidenceThreshold: 40,
+  autoRoutingEnabled: true,
+  autoRoutingThreshold: 70,
+  requireAdminConfirmation: false,
+  defaultOrganizationId: 'org-rwa-1',
+  updatedAt: new Date().toISOString(),
+};
+
