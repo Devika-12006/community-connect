@@ -100,10 +100,37 @@ export interface CommunityConnectDB extends DBSchema {
     key: string;
     value: import('../types').WhatsAppIntegrationConfig;
   };
+  assets: {
+    key: string;
+    value: import('../types').Asset;
+    indexes: {
+      'by-category': string;
+      'by-building': string;
+      'by-code': string;
+      'by-active': number;
+    };
+  };
+  knowledge_base: {
+    key: string;
+    value: import('../types').CommunityKnowledgeItem;
+    indexes: {
+      'by-category': string;
+      'by-active': number;
+    };
+  };
+  user_accounts: {
+    key: string;
+    value: import('../types').UserAccount;
+    indexes: {
+      'by-username': string;
+      'by-email': string;
+      'by-role': string;
+    };
+  };
 }
 
-const DB_NAME = 'community_connect_v2_db';
-const DB_VERSION = 2;
+const DB_NAME = 'community_connect_v3_db';
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<CommunityConnectDB>> | null = null;
 
@@ -188,6 +215,28 @@ export function getDatabase(): Promise<IDBPDatabase<CommunityConnectDB>> {
 
         if (!db.objectStoreNames.contains('integration_config')) {
           db.createObjectStore('integration_config', { keyPath: 'id' });
+        }
+
+        // --- Stores for Asset Management, Knowledge Base, and Authentication ---
+        if (!db.objectStoreNames.contains('assets')) {
+          const store = db.createObjectStore('assets', { keyPath: 'id' });
+          store.createIndex('by-category', 'category');
+          store.createIndex('by-building', 'building');
+          store.createIndex('by-code', 'assetCode', { unique: true });
+          store.createIndex('by-active', 'active');
+        }
+
+        if (!db.objectStoreNames.contains('knowledge_base')) {
+          const store = db.createObjectStore('knowledge_base', { keyPath: 'id' });
+          store.createIndex('by-category', 'category');
+          store.createIndex('by-active', 'active');
+        }
+
+        if (!db.objectStoreNames.contains('user_accounts')) {
+          const store = db.createObjectStore('user_accounts', { keyPath: 'id' });
+          store.createIndex('by-username', 'username', { unique: true });
+          store.createIndex('by-email', 'email');
+          store.createIndex('by-role', 'role');
         }
       },
     });

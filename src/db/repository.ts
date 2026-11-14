@@ -16,13 +16,97 @@ import {
   type ComplaintAssignmentRecord,
   type AuditLogEntry,
   type WhatsAppIntegrationConfig,
+  type Asset,
+  type CommunityKnowledgeItem,
+  type UserAccount,
 } from '../types';
 import {
   SEED_ORGANIZATIONS,
   SEED_CONTACTS,
   SEED_GROUP_MESSAGES,
   SEED_INTEGRATION_CONFIG,
+  SEED_ASSETS,
+  SEED_KNOWLEDGE_BASE,
+  SEED_USER_ACCOUNTS,
 } from './agentSeedData';
+
+export const SEED_RESIDENTS: Resident[] = [
+  {
+    id: 'res-devika-1',
+    displayName: 'Devika Sen',
+    block: 'Block A',
+    flatNumber: '302',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+  {
+    id: 'res-arjun-1',
+    displayName: 'Arjun Verma',
+    block: 'Block B',
+    flatNumber: '501',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+  {
+    id: 'res-priya-1',
+    displayName: 'Priya Nair',
+    block: 'Block A',
+    flatNumber: '104',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+];
+
+export const SEED_WORKERS: Worker[] = [
+  {
+    id: 'worker-plumber-1',
+    name: 'Ramesh Kumar',
+    specialty: 'Plumbing & Water Systems',
+    contactNumber: '+919876543212',
+    skills: ['Pipeline Welding', 'Booster Pump Overhaul', 'Valve Replacement', 'Drainage Clearing'],
+    supportedCategories: ['Water Leakage', 'Drainage'],
+    completedTasksCount: 14,
+    activeWorkload: 1,
+    averageRating: 4.8,
+    availabilityStatus: 'Available',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+  {
+    id: 'worker-elec-1',
+    name: 'Suresh Patel',
+    specialty: 'Electrical Maintenance',
+    contactNumber: '+919876543210',
+    skills: ['High Voltage Wiring', 'Circuit Breakers', 'Streetlight Repairs', 'Generator Servicing'],
+    supportedCategories: ['Streetlights', 'Common-Area Electrical'],
+    completedTasksCount: 19,
+    activeWorkload: 2,
+    averageRating: 4.9,
+    availabilityStatus: 'Available',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+  {
+    id: 'worker-elev-1',
+    name: 'Vikram Singh',
+    specialty: 'Elevator & Lift Maintenance',
+    contactNumber: '+919876543214',
+    skills: ['Traction Cable Inspection', 'Door Sensor Alignment', 'Governor Calibration', 'Emergency Braking'],
+    supportedCategories: ['Common-Area Electrical'],
+    completedTasksCount: 11,
+    activeWorkload: 1,
+    averageRating: 4.7,
+    availabilityStatus: 'Available',
+    active: true,
+    createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+  },
+];
 
 export const repository = {
   // --- Settings ---
@@ -279,11 +363,19 @@ export const repository = {
     return complaint;
   },
 
-  // --- AI Agent Seed Initialization ---
+  // --- AI Agent & Platform Seed Initialization ---
   async ensureSeedData(): Promise<void> {
     try {
       const db = await getDatabase();
-      const orgs = await db.getAll('organizations');
+      const [orgs, users, assets, know, residents, workers] = await Promise.all([
+        db.getAll('organizations'),
+        db.getAll('user_accounts'),
+        db.getAll('assets'),
+        db.getAll('knowledge_base'),
+        db.getAll('residents'),
+        db.getAll('workers'),
+      ]);
+
       if (orgs.length === 0) {
         const tx = db.transaction(
           ['organizations', 'contacts', 'group_messages', 'integration_config'],
@@ -301,8 +393,48 @@ export const repository = {
         await tx.objectStore('integration_config').put(SEED_INTEGRATION_CONFIG);
         await tx.done;
       }
+
+      if (assets.length === 0) {
+        const tx = db.transaction('assets', 'readwrite');
+        for (const asset of SEED_ASSETS) {
+          await tx.objectStore('assets').put(asset);
+        }
+        await tx.done;
+      }
+
+      if (know.length === 0) {
+        const tx = db.transaction('knowledge_base', 'readwrite');
+        for (const item of SEED_KNOWLEDGE_BASE) {
+          await tx.objectStore('knowledge_base').put(item);
+        }
+        await tx.done;
+      }
+
+      if (users.length === 0) {
+        const tx = db.transaction('user_accounts', 'readwrite');
+        for (const user of SEED_USER_ACCOUNTS) {
+          await tx.objectStore('user_accounts').put(user);
+        }
+        await tx.done;
+      }
+
+      if (residents.length === 0) {
+        const tx = db.transaction('residents', 'readwrite');
+        for (const res of SEED_RESIDENTS) {
+          await tx.objectStore('residents').put(res);
+        }
+        await tx.done;
+      }
+
+      if (workers.length === 0) {
+        const tx = db.transaction('workers', 'readwrite');
+        for (const wrk of SEED_WORKERS) {
+          await tx.objectStore('workers').put(wrk);
+        }
+        await tx.done;
+      }
     } catch (err) {
-      console.error('Failed to ensure agent seed data:', err);
+      console.error('Failed to ensure platform seed data:', err);
     }
   },
 
@@ -477,6 +609,145 @@ export const repository = {
     broadcastDataChange('integration_config', config.id);
   },
 
+  // --- Assets (Manual Selection Only - Strictly No QR) ---
+  async getAssets(filter?: {
+    category?: string;
+    building?: string;
+    activeOnly?: boolean;
+    search?: string;
+  }): Promise<Asset[]> {
+    await this.ensureSeedData();
+    try {
+      const db = await getDatabase();
+      let list = await db.getAll('assets');
+      if (filter?.activeOnly !== false) {
+        list = list.filter((a) => a.active);
+      }
+      if (filter?.category && filter.category !== 'ALL') {
+        list = list.filter((a) => a.category === filter.category);
+      }
+      if (filter?.building && filter.building !== 'ALL') {
+        list = list.filter((a) => a.building.toLowerCase() === filter.building?.toLowerCase());
+      }
+      if (filter?.search && filter.search.trim()) {
+        const q = filter.search.toLowerCase().trim();
+        list = list.filter(
+          (a) =>
+            a.assetCode.toLowerCase().includes(q) ||
+            a.name.toLowerCase().includes(q) ||
+            a.location.toLowerCase().includes(q) ||
+            a.category.toLowerCase().includes(q)
+        );
+      }
+      return list.sort((a, b) => a.assetCode.localeCompare(b.assetCode));
+    } catch {
+      return [];
+    }
+  },
+
+  async getAsset(id: string): Promise<Asset | null> {
+    try {
+      const db = await getDatabase();
+      const asset = await db.get('assets', id);
+      return asset || null;
+    } catch {
+      return null;
+    }
+  },
+
+  async getAssetByCode(code: string): Promise<Asset | null> {
+    try {
+      const db = await getDatabase();
+      const asset = await db.getFromIndex('assets', 'by-code', code.trim().toUpperCase());
+      return asset || null;
+    } catch {
+      return null;
+    }
+  },
+
+  async saveAsset(asset: Asset): Promise<void> {
+    const db = await getDatabase();
+    await db.put('assets', asset);
+    broadcastDataChange('assets', asset.id);
+  },
+
+  async deleteAsset(id: string): Promise<void> {
+    const db = await getDatabase();
+    await db.delete('assets', id);
+    broadcastDataChange('assets', id);
+  },
+
+  // --- Community Knowledge Base (AI Assistant RAG Store) ---
+  async getKnowledgeItems(category?: string, activeOnly = true): Promise<CommunityKnowledgeItem[]> {
+    await this.ensureSeedData();
+    try {
+      const db = await getDatabase();
+      let list = await db.getAll('knowledge_base');
+      if (activeOnly) {
+        list = list.filter((item) => item.active);
+      }
+      if (category && category !== 'ALL') {
+        list = list.filter((item) => item.category === category);
+      }
+      return list.sort((a, b) => a.title.localeCompare(b.title));
+    } catch {
+      return [];
+    }
+  },
+
+  async getKnowledgeItem(id: string): Promise<CommunityKnowledgeItem | null> {
+    try {
+      const db = await getDatabase();
+      const item = await db.get('knowledge_base', id);
+      return item || null;
+    } catch {
+      return null;
+    }
+  },
+
+  async saveKnowledgeItem(item: CommunityKnowledgeItem): Promise<void> {
+    const db = await getDatabase();
+    await db.put('knowledge_base', item);
+    broadcastDataChange('knowledge_base', item.id);
+  },
+
+  async deleteKnowledgeItem(id: string): Promise<void> {
+    const db = await getDatabase();
+    await db.delete('knowledge_base', id);
+    broadcastDataChange('knowledge_base', id);
+  },
+
+  // --- User Accounts (Authentication & Credentials) ---
+  async getUserAccounts(): Promise<UserAccount[]> {
+    await this.ensureSeedData();
+    try {
+      const db = await getDatabase();
+      return await db.getAll('user_accounts');
+    } catch {
+      return [];
+    }
+  },
+
+  async getUserByUsername(username: string): Promise<UserAccount | null> {
+    await this.ensureSeedData();
+    try {
+      const db = await getDatabase();
+      const user = await db.getFromIndex('user_accounts', 'by-username', username.trim().toLowerCase());
+      return user || null;
+    } catch {
+      return null;
+    }
+  },
+
+  async saveUserAccount(user: UserAccount): Promise<void> {
+    const db = await getDatabase();
+    await db.put('user_accounts', {
+      ...user,
+      username: user.username.trim().toLowerCase(),
+    });
+    broadcastDataChange('user_accounts', user.id);
+  },
+
   // --- Reset All Data ---
   async resetAllData(): Promise<void> {
     const db = await getDatabase();
@@ -494,6 +765,9 @@ export const repository = {
       'assignments',
       'audit_logs',
       'integration_config',
+      'assets',
+      'knowledge_base',
+      'user_accounts',
     ] as const;
     const tx = db.transaction(stores, 'readwrite');
     for (const store of stores) {
@@ -512,6 +786,22 @@ export const repository = {
       await tx.objectStore('group_messages').put(msg);
     }
     await tx.objectStore('integration_config').put(SEED_INTEGRATION_CONFIG);
+
+    for (const asset of SEED_ASSETS) {
+      await tx.objectStore('assets').put(asset);
+    }
+    for (const item of SEED_KNOWLEDGE_BASE) {
+      await tx.objectStore('knowledge_base').put(item);
+    }
+    for (const user of SEED_USER_ACCOUNTS) {
+      await tx.objectStore('user_accounts').put(user);
+    }
+    for (const resident of SEED_RESIDENTS) {
+      await tx.objectStore('residents').put(resident);
+    }
+    for (const worker of SEED_WORKERS) {
+      await tx.objectStore('workers').put(worker);
+    }
 
     await tx.done;
     broadcastDataChange('all');

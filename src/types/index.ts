@@ -81,9 +81,103 @@ export interface Worker {
   name: string;
   contactNumber?: string;
   specialty: string;
+  skills?: string[];
+  supportedCategories?: ComplaintCategory[];
+  completedTasksCount?: number;
+  activeWorkload?: number;
+  averageRating?: number;
+  availabilityStatus?: 'Available' | 'Busy' | 'On Leave';
   active: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Asset {
+  id: string;
+  assetCode: string; // e.g. "AST-ELEV-01", "AST-PUMP-01"
+  name: string;
+  category: ComplaintCategory;
+  building: string;
+  location: string;
+  criticality: number; // 1 to 5 scale
+  condition: 'Operational' | 'Degraded' | 'Critical Failure' | 'Maintenance Due';
+  installationDate?: string;
+  lastMaintenanceDate?: string;
+  nextMaintenanceDate?: string;
+  frequencyDays?: number;
+  notes?: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PriorityAssessment {
+  severity: number; // S (0-5)
+  affected: number; // A (0-5)
+  waitingTime: number; // W (0-5)
+  recurrence: number; // R (0-5)
+  score: number; // P = 7S + 5A + 4W + 4R (max 100)
+  level: 'Low' | 'Medium' | 'High' | 'Critical';
+  breakdown: {
+    safetyScore: number;
+    affectedScore: number;
+    waitingScore: number;
+    recurrenceScore: number;
+  };
+  formula: string;
+  explanation: string;
+  isOverridden?: boolean;
+  originalScore?: number;
+  originalLevel?: 'Low' | 'Medium' | 'High' | 'Critical';
+  overrideReason?: string;
+  overriddenBy?: string;
+  overriddenAt?: string;
+}
+
+export interface DuplicateMatch {
+  matchedComplaintId: string;
+  matchedReference: string;
+  matchedTitle: string;
+  category: ComplaintCategory;
+  block: string;
+  similarityScore: number; // 0 to 100
+  factors: string[];
+  status: 'Flagged' | 'Confirmed' | 'Dismissed' | 'Separate Issue';
+}
+
+export interface CommunityKnowledgeItem {
+  id: string;
+  category:
+    | 'Water Schedule'
+    | 'Garbage Schedule'
+    | 'Maintenance Contact'
+    | 'Emergency Contact'
+    | 'Community Rule'
+    | 'Notice'
+    | 'FAQ'
+    | 'Maintenance Timings';
+  title: string;
+  content: string;
+  details?: Record<string, any>;
+  sourceName?: string;
+  active: boolean;
+  lastUpdated: string;
+  createdAt: string;
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  email: string;
+  passwordHash: string;
+  salt: string;
+  role: RoleType;
+  fullName: string;
+  phone?: string;
+  active: boolean;
+  residentId?: string;
+  workerId?: string;
+  createdAt: string;
 }
 
 export interface Complaint {
@@ -99,11 +193,16 @@ export interface Complaint {
   suggestedCategory?: ComplaintCategory;
   block: string;
   specificLocation: string;
+  // Asset binding (Manual search only - NO QR)
+  assetId?: string;
+  assetCode?: string;
+  assetName?: string;
   latitude?: number;
   longitude?: number;
   priority: ComplaintPriority;
   suggestedPriority?: ComplaintPriority;
   priorityReason?: string;
+  priorityAssessment?: PriorityAssessment;
   status: ComplaintStatus;
   assignedWorkerId?: string;
   assignedWorkerName?: string;
@@ -128,6 +227,15 @@ export interface Complaint {
   imageVerificationStatus?: 'Verified' | 'Mismatch' | 'Uncertain' | 'Unavailable';
   visualCategorySuggested?: ComplaintCategory | 'Uncertain';
   visualExplanation?: string;
+  managerReviewDecision?: 'Approved' | 'Flagged' | 'Uncertain' | 'Dismissed';
+  managerReviewNotes?: string;
+  managerReviewedAt?: string;
+  managerReviewedBy?: string;
+  // Duplicate detection details
+  isDuplicate?: boolean;
+  duplicateOfId?: string;
+  duplicateStatus?: 'None' | 'Flagged' | 'Confirmed' | 'Dismissed' | 'Linked';
+  duplicateMatch?: DuplicateMatch;
   // Geolocation & Live Capture Metadata
   captureLatitude?: number;
   captureLongitude?: number;

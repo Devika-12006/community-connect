@@ -15,6 +15,7 @@ import { ReportIssuePage } from './pages/resident/ReportIssuePage';
 import { MyComplaintsPage } from './pages/resident/MyComplaintsPage';
 import { ComplaintDetailsPage } from './pages/resident/ComplaintDetailsPage';
 import { ResidentProfilePage } from './pages/resident/ResidentProfilePage';
+import { CommunityAssistantPage } from './pages/resident/CommunityAssistantPage';
 
 // Manager Pages
 import { ManagerOverviewPage } from './pages/manager/ManagerOverviewPage';
@@ -26,6 +27,8 @@ import { AIAgentDashboardPage } from './pages/manager/AIAgentDashboardPage';
 import { ContactDirectoryPage } from './pages/manager/ContactDirectoryPage';
 import { GroupMessagesPage } from './pages/manager/GroupMessagesPage';
 import { IntegrationSettingsPage } from './pages/manager/IntegrationSettingsPage';
+import { ManagerAssetsPage } from './pages/manager/ManagerAssetsPage';
+import { ManagerKnowledgePage } from './pages/manager/ManagerKnowledgePage';
 
 // Worker Pages
 import { WorkerTasksPage } from './pages/worker/WorkerTasksPage';
@@ -56,6 +59,7 @@ function App() {
               <Route path="report" element={<ReportIssuePage />} />
               <Route path="complaints" element={<MyComplaintsPage />} />
               <Route path="complaints/:id" element={<ComplaintDetailsPage />} />
+              <Route path="assistant" element={<CommunityAssistantPage />} />
               <Route path="map" element={<CommunityMapPage />} />
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="profile" element={<ResidentProfilePage />} />
@@ -69,6 +73,8 @@ function App() {
               <Route path="overview" element={<ManagerOverviewPage />} />
               <Route path="ai-agent" element={<AIAgentDashboardPage />} />
               <Route path="complaints" element={<ManagerComplaintsPage />} />
+              <Route path="assets" element={<ManagerAssetsPage />} />
+              <Route path="knowledge" element={<ManagerKnowledgePage />} />
               <Route path="contacts" element={<ContactDirectoryPage />} />
               <Route path="group-messages" element={<GroupMessagesPage />} />
               <Route path="workers" element={<ManagerWorkersPage />} />

@@ -17,6 +17,8 @@ import {
   Star,
   XCircle,
   Check,
+  Layers,
+  Sliders,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 
@@ -346,6 +348,54 @@ export const ComplaintDetailsPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Linked Community Asset (If linked) */}
+        {(complaint.assetId || complaint.assetCode || complaint.assetName) && (
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-blue-700 shrink-0" />
+              <div>
+                <div className="font-bold text-blue-950 flex items-center gap-1.5">
+                  <span>{complaint.assetName || 'Community Equipment'}</span>
+                  {complaint.assetCode && (
+                    <span className="font-mono text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
+                      {complaint.assetCode}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-blue-700">
+                  Linked Society Equipment • Location: {complaint.block}
+                </div>
+              </div>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+              Verified Asset
+            </span>
+          </div>
+        )}
+
+        {/* Explainable Priority Formula Assessment */}
+        {complaint.priorityAssessment && (
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <Sliders className="w-3.5 h-3.5 text-teal-700" />
+                <span>Explainable Priority Assessment (P = 7S + 5A + 4W + 4R)</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                complaint.priorityAssessment.level === 'Critical' ? 'bg-red-100 text-red-800' :
+                complaint.priorityAssessment.level === 'High' ? 'bg-amber-100 text-amber-800' :
+                complaint.priorityAssessment.level === 'Medium' ? 'bg-blue-100 text-blue-800' :
+                'bg-slate-200 text-slate-800'
+              }`}>
+                Score: {complaint.priorityAssessment.score}/100 ({complaint.priorityAssessment.level})
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              {complaint.priorityAssessment.explanation}
+            </p>
+          </div>
+        )}
 
         {/* Rejection / Correction Callout */}
         {complaint.status === 'Rejected' && complaint.rejectionReason && (

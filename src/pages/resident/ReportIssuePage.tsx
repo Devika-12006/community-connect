@@ -5,12 +5,18 @@ import { repository } from '../../db/repository';
 import {
   COMPLAINT_CATEGORIES,
   type ComplaintCategory,
+  type ComplaintPriority,
   type Complaint,
   type ImageAsset,
   type ImageQualityReport,
   type GeoLocationData,
+  type Asset,
+  type PriorityAssessment,
+  type DuplicateMatch,
 } from '../../types';
 import { suggestCategory, checkPossibleDuplicate, type DuplicateWarning } from '../../lib/smartAssistance';
+import { priorityEngine } from '../../services/priorityEngine';
+import { duplicateDetectionService } from '../../services/duplicateDetectionService';
 import {
   inspectImageWithCanvas,
   computeContentHash,
@@ -74,6 +80,9 @@ export const ReportIssuePage: React.FC = () => {
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [visualResult, setVisualResult] = useState<VisualClassificationResult | null>(null);
   const [visualDismissed, setVisualDismissed] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdComplaint, setCreatedComplaint] = useState<Complaint | null>(null);
 
   // Location state
   const [block, setBlock] = useState(activeResident?.block || settings.blocks[0] || 'Block A');
@@ -91,10 +100,72 @@ export const ReportIssuePage: React.FC = () => {
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning>({ hasDuplicate: false });
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
-  // Submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [createdComplaint, setCreatedComplaint] = useState<Complaint | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  // Asset state (Manual selection only - STRICTLY NO QR)
+  const [availableAssets, setAvailableAssets] = useState<Asset[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+
+  // Explainable Priority parameters (P = 7S + 5A + 4W + 4R)
+  const [severity, setSeverity] = useState<number>(3); // 1-5 scale
+  const [affected, setAffected] = useState<number>(2); // 1-5 scale
+  const [recurrenceScore, setRecurrenceScore] = useState<number>(1);
+  const [livePriorityAssessment, setLivePriorityAssessment] = useState<PriorityAssessment | null>(null);
+
+  // Multi-signal duplicate detection
+  const [multiDuplicate, setMultiDuplicate] = useState<DuplicateMatch | null>(null);
+
+  // Load community assets
+  useEffect(() => {
+    repository.getAssets({ activeOnly: true }).then(setAvailableAssets);
+  }, []);
+
+  // Compute live recurrence & priority score dynamically
+  useEffect(() => {
+    let isMounted = true;
+    priorityEngine
+      .calculateRecurrenceScore({
+        assetId: selectedAsset?.id,
+        category,
+        block,
+      })
+      .then((rec) => {
+        if (!isMounted) return;
+        setRecurrenceScore(rec);
+        const assessment = priorityEngine.computePriority({
+          severity,
+          affected: selectedAsset ? Math.max(affected, selectedAsset.criticality) : affected,
+          waitingTime: 1, // Just submitted
+          recurrence: rec,
+          assetName: selectedAsset?.name,
+        });
+        setLivePriorityAssessment(assessment);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [severity, affected, selectedAsset, category, block]);
+
+  // Multi-signal duplicate check
+  useEffect(() => {
+    let isMounted = true;
+    if (title.length > 3) {
+      duplicateDetectionService
+        .scanForDuplicates({
+          title,
+          description,
+          category,
+          block,
+          assetId: selectedAsset?.id,
+        })
+        .then((match) => {
+          if (isMounted) setMultiDuplicate(match);
+        });
+    } else {
+      setMultiDuplicate(null);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [title, description, category, block, selectedAsset]);
 
   const [draftId] = useState(() => crypto.randomUUID());
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -410,10 +481,15 @@ export const ReportIssuePage: React.FC = () => {
         captureSessionId: images[0]?.captureSessionId,
         captureAddress: images[0]?.geo?.address,
         isLiveCapture: images.length > 0,
-        priority: requestUrgent ? 'Urgent' : 'Low',
-        suggestedPriority: requestUrgent ? 'Urgent' : undefined,
+        assetId: selectedAsset?.id,
+        assetCode: selectedAsset?.assetCode,
+        assetName: selectedAsset?.name,
+        priority: (livePriorityAssessment?.level === 'Critical' ? 'Urgent' : (livePriorityAssessment?.level as ComplaintPriority)) || (requestUrgent ? 'Urgent' : 'Low'),
+        priorityAssessment: livePriorityAssessment || undefined,
+        suggestedPriority: (livePriorityAssessment?.level === 'Critical' ? 'Urgent' : (livePriorityAssessment?.level as ComplaintPriority)) || (requestUrgent ? 'Urgent' : undefined),
         status: 'Submitted',
         originalImageIds: imageIds,
+        duplicateMatch: multiDuplicate || undefined,
         requestUrgentAttention: requestUrgent,
         urgentReason: requestUrgent ? urgentReason.trim() : undefined,
         isSuspicious,
@@ -604,6 +680,56 @@ export const ReportIssuePage: React.FC = () => {
               maxLength={100}
               className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none"
             />
+          </div>
+
+          {/* Linked Community Asset (Manual Selection Only - No QR) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Linked Community Asset (Optional)
+              </label>
+              <span className="text-[11px] text-slate-500 font-normal">Manual search & select</span>
+            </div>
+            <select
+              value={selectedAsset?.id || ''}
+              onChange={(e) => {
+                const found = availableAssets.find((a) => a.id === e.target.value) || null;
+                setSelectedAsset(found);
+                if (found) {
+                  if (found.category) setCategory(found.category);
+                  if (found.building) setBlock(found.building);
+                  if (found.location && !specificLocation) setSpecificLocation(found.location);
+                }
+              }}
+              className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none bg-white"
+            >
+              <option value="">(None / General Society Area)</option>
+              {availableAssets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  [{asset.assetCode}] {asset.name} — {asset.building} ({asset.category})
+                </option>
+              ))}
+            </select>
+            {selectedAsset && (
+              <div className="mt-2 p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-xs text-teal-900 flex items-center justify-between">
+                <div>
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span>{selectedAsset.name}</span>
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-teal-200 text-teal-900 font-bold">{selectedAsset.assetCode}</span>
+                  </div>
+                  <div className="text-[11px] text-teal-700 mt-0.5">
+                    {selectedAsset.building} • {selectedAsset.location} • Criticality: {selectedAsset.criticality}/5
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAsset(null)}
+                  className="text-xs text-teal-800 hover:text-teal-950 font-bold px-2 py-1 bg-teal-100 hover:bg-teal-200 rounded"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Transparent Category Suggestion Helper */}
@@ -859,6 +985,92 @@ export const ReportIssuePage: React.FC = () => {
             )}
           </div>
 
+          {/* Explainable Priority Formula Assessment: P = 7S + 5A + 4W + 4R */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Priority & Impact Assessment
+              </label>
+              {livePriorityAssessment && (
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                  livePriorityAssessment.level === 'Critical' ? 'bg-red-100 text-red-800 border border-red-300' :
+                  livePriorityAssessment.level === 'High' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                  livePriorityAssessment.level === 'Medium' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                  'bg-slate-200 text-slate-800 border border-slate-300'
+                }`}>
+                  {livePriorityAssessment.level} Priority ({livePriorityAssessment.score}/100)
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-slate-700">Safety Hazard / Severity (S: {severity}/5)</label>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={5}
+                  value={severity}
+                  onChange={(e) => setSeverity(Number(e.target.value))}
+                  className="w-full accent-teal-700 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>1: Minor inconvenience</span>
+                  <span>3: Moderate</span>
+                  <span>5: Life / property danger</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-slate-700">People Affected (A: {affected}/5)</label>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={5}
+                  value={affected}
+                  onChange={(e) => setAffected(Number(e.target.value))}
+                  className="w-full accent-teal-700 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>1: Single unit</span>
+                  <span>3: Floor / corridor</span>
+                  <span>5: Entire community</span>
+                </div>
+              </div>
+            </div>
+
+            {livePriorityAssessment && (
+              <div className="p-2.5 rounded-lg bg-white border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                <div className="font-mono font-bold text-teal-900">
+                  Formula: P = 7S + 5A + 4W + 4R = 7({severity}) + 5({selectedAsset ? Math.max(affected, selectedAsset.criticality) : affected}) + 4(1) + 4({recurrenceScore}) = {livePriorityAssessment.score}/100
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  {livePriorityAssessment.explanation}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Multi-Signal Smart Duplicate Warning */}
+          {multiDuplicate && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-900 space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Smart Duplicate Warning ({multiDuplicate.similarityScore}% Match)</span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                Matches complaint <strong>{multiDuplicate.matchedReference}</strong> ("{multiDuplicate.matchedTitle}")
+              </p>
+              <div className="text-[10px] text-amber-700 font-mono">
+                Matching factors: {multiDuplicate.factors.join(', ')}
+              </div>
+            </div>
+          )}
+
           {/* Transparent Duplicate Warning Helper */}
           {duplicateWarning.hasDuplicate && (
             <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 flex items-start gap-3">
@@ -1034,6 +1246,37 @@ export const ReportIssuePage: React.FC = () => {
                 <div className="text-[11px] text-slate-500 flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-teal-700" />
                   <span>GPS: {latitude.toFixed(5)}, {longitude.toFixed(5)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Priority Assessment & Asset Summary */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Asset & Priority Assessment</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedAsset ? (
+                  <span className="px-2.5 py-1 rounded bg-teal-100 text-teal-800 text-xs font-semibold">
+                    Asset: {selectedAsset.name} ({selectedAsset.assetCode})
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded bg-slate-200 text-slate-700 text-xs">
+                    No specific asset linked
+                  </span>
+                )}
+                {livePriorityAssessment && (
+                  <span className={`px-2.5 py-1 rounded text-xs font-bold ${
+                    livePriorityAssessment.level === 'Critical' ? 'bg-red-100 text-red-800' :
+                    livePriorityAssessment.level === 'High' ? 'bg-amber-100 text-amber-800' :
+                    livePriorityAssessment.level === 'Medium' ? 'bg-blue-100 text-blue-800' :
+                    'bg-slate-200 text-slate-800'
+                  }`}>
+                    Priority: {livePriorityAssessment.level} ({livePriorityAssessment.score}/100)
+                  </span>
+                )}
+              </div>
+              {livePriorityAssessment && (
+                <div className="text-[11px] text-slate-600 font-mono">
+                  Formula: P = 7({severity}) + 5({selectedAsset ? Math.max(affected, selectedAsset.criticality) : affected}) + 4(1) + 4({recurrenceScore}) = {livePriorityAssessment.score}/100
                 </div>
               )}
             </div>

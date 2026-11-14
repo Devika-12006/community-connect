@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { RoleSwitcher } from '../common/RoleSwitcher';
+import { FloatingAssistantWidget } from '../common/FloatingAssistantWidget';
 import {
   LayoutDashboard,
   PlusCircle,
@@ -11,6 +12,7 @@ import {
   User,
   Building2,
   LogOut,
+  Sparkles,
 } from 'lucide-react';
 
 export const ResidentLayout: React.FC = () => {
@@ -26,6 +28,7 @@ export const ResidentLayout: React.FC = () => {
     { to: '/resident/home', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/resident/report', label: 'Report Issue', icon: PlusCircle },
     { to: '/resident/complaints', label: 'My Complaints', icon: ListOrdered },
+    { to: '/resident/assistant', label: 'AI Assistant', icon: Sparkles },
     { to: '/resident/map', label: 'Community Map', icon: MapPin },
     {
       to: '/resident/notifications',
@@ -116,6 +119,9 @@ export const ResidentLayout: React.FC = () => {
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <Outlet />
       </main>
+
+      {/* Persistent AI Community Assistant Widget */}
+      <FloatingAssistantWidget />
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 flex items-center justify-around h-16 px-2 shadow-lg">

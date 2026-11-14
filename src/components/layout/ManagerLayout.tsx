@@ -18,6 +18,8 @@ import {
   BookUser,
   MessageSquare,
   Sliders,
+  Layers,
+  BookOpen,
 } from 'lucide-react';
 
 export const ManagerLayout: React.FC = () => {
@@ -36,6 +38,8 @@ export const ManagerLayout: React.FC = () => {
     { to: '/manager/overview', label: 'Overview', icon: LayoutDashboard },
     { to: '/manager/ai-agent', label: 'AI Complaint Agent', icon: Bot, isNew: true },
     { to: '/manager/complaints', label: 'Complaints', icon: ClipboardList },
+    { to: '/manager/assets', label: 'Asset Registry', icon: Layers },
+    { to: '/manager/knowledge', label: 'AI Knowledge Base', icon: BookOpen },
     { to: '/manager/contacts', label: 'Contact Directory', icon: BookUser },
     { to: '/manager/group-messages', label: 'Group Notices', icon: MessageSquare },
     { to: '/manager/workers', label: 'Workers', icon: Users },

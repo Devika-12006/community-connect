@@ -18,6 +18,8 @@ import { PriorityBadge } from '../../components/common/PriorityBadge';
 import { ImageViewer } from '../../components/common/ImageViewer';
 import { Modal } from '../../components/common/Modal';
 import { formatCoordinates } from '../../lib/geoUtils';
+import { priorityEngine } from '../../services/priorityEngine';
+import { workerRecommendationService, type WorkerRecommendation } from '../../services/workerRecommendationService';
 import {
   Search,
   UserCheck,
@@ -35,6 +37,8 @@ import {
   ShieldCheck,
   Monitor,
   Navigation,
+  Sliders,
+  Layers,
 } from 'lucide-react';
 
 export const ManagerComplaintsPage: React.FC = () => {
@@ -72,6 +76,14 @@ export const ManagerComplaintsPage: React.FC = () => {
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
 
+  // Priority Override modal
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideNewLevel, setOverrideNewLevel] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('High');
+  const [overrideReason, setOverrideReason] = useState('');
+
+  // Smart Worker Recommendations
+  const [workerRecommendations, setWorkerRecommendations] = useState<WorkerRecommendation[]>([]);
+
   // Feedback banner
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -84,6 +96,14 @@ export const ManagerComplaintsPage: React.FC = () => {
     setPublicUpdate('');
     const evs = await repository.getEvents(c.id);
     setComplaintEvents(evs);
+
+    // Compute smart worker recommendations
+    try {
+      const recs = await workerRecommendationService.getRecommendations(c);
+      setWorkerRecommendations(recs);
+    } catch {
+      setWorkerRecommendations([]);
+    }
 
     // Load original image assets
     if (c.originalImageIds && c.originalImageIds.length > 0) {
@@ -124,6 +144,136 @@ export const ManagerComplaintsPage: React.FC = () => {
       setComplaintEvents(evs);
       showSuccessBanner('Suspicious flag dismissed.');
     }
+  };
+
+  const handleApplyPriorityOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedComplaint || !overrideReason.trim()) {
+      alert('Mandatory justification is required to override system priority.');
+      return;
+    }
+    const now = new Date().toISOString();
+    const currentAssessment =
+      selectedComplaint.priorityAssessment ||
+      priorityEngine.computePriority({
+        severity: 2,
+        affected: 2,
+        waitingTime: 1,
+        recurrence: 1,
+      });
+
+    const overriddenAssessment = priorityEngine.overridePriority(
+      currentAssessment,
+      overrideNewLevel,
+      overrideReason.trim(),
+      'Community Manager'
+    );
+
+    const mappedPriority: ComplaintPriority =
+      overrideNewLevel === 'Critical' ? 'Urgent' : (overrideNewLevel as ComplaintPriority);
+
+    const updated: Complaint = {
+      ...selectedComplaint,
+      priority: mappedPriority,
+      priorityAssessment: overriddenAssessment,
+      updatedAt: now,
+    };
+
+    await repository.saveComplaint(updated);
+    await repository.addEvent({
+      id: crypto.randomUUID(),
+      complaintId: selectedComplaint.id,
+      eventType: 'PriorityChanged',
+      action: `Priority Overridden to ${overrideNewLevel}`,
+      actorRole: 'Manager',
+      actorName: 'Community Manager',
+      visibility: 'public',
+      note: `Override justification: ${overrideReason.trim()}`,
+      createdAt: now,
+    });
+
+    setSelectedComplaint(updated);
+    setNewPriority(mappedPriority);
+    setShowOverrideModal(false);
+    setOverrideReason('');
+    await refreshAll();
+    const evs = await repository.getEvents(selectedComplaint.id);
+    setComplaintEvents(evs);
+    showSuccessBanner(`Priority overridden to ${overrideNewLevel} with recorded justification.`);
+  };
+
+  const handleDuplicateAction = async (action: 'Confirm' | 'Link' | 'MarkSeparate' | 'Dismiss') => {
+    if (!selectedComplaint) return;
+    const now = new Date().toISOString();
+    let updated: Complaint = { ...selectedComplaint, updatedAt: now };
+
+    if (action === 'Confirm') {
+      updated.duplicateStatus = 'Confirmed';
+      updated.isDuplicate = true;
+      if (selectedComplaint.duplicateMatch?.matchedComplaintId) {
+        updated.duplicateOfId = selectedComplaint.duplicateMatch.matchedComplaintId;
+      }
+    } else if (action === 'Link') {
+      updated.duplicateStatus = 'Linked';
+      if (selectedComplaint.duplicateMatch?.matchedComplaintId) {
+        updated.duplicateOfId = selectedComplaint.duplicateMatch.matchedComplaintId;
+      }
+    } else if (action === 'MarkSeparate') {
+      updated.duplicateStatus = 'Dismissed';
+      updated.isDuplicate = false;
+    } else if (action === 'Dismiss') {
+      updated.duplicateStatus = 'Dismissed';
+    }
+
+    await repository.saveComplaint(updated);
+    await repository.addEvent({
+      id: crypto.randomUUID(),
+      complaintId: selectedComplaint.id,
+      eventType: 'InternalNote',
+      action: `Duplicate Action: ${action}`,
+      actorRole: 'Manager',
+      actorName: 'Community Manager',
+      visibility: 'internal',
+      note: `Manager duplicate review decision: ${action}. (Complaints are never auto-deleted)`,
+      createdAt: now,
+    });
+
+    setSelectedComplaint(updated);
+    await refreshAll();
+    const evs = await repository.getEvents(selectedComplaint.id);
+    setComplaintEvents(evs);
+    showSuccessBanner(`Duplicate review updated: ${action}`);
+  };
+
+  const handleImageReviewDecision = async (decision: 'Approved' | 'Flagged') => {
+    if (!selectedComplaint) return;
+    const now = new Date().toISOString();
+    const updated: Complaint = {
+      ...selectedComplaint,
+      managerReviewDecision: decision,
+      managerReviewedAt: now,
+      managerReviewedBy: 'Community Manager',
+      updatedAt: now,
+    };
+
+    await repository.saveComplaint(updated);
+    await repository.addEvent({
+      id: crypto.randomUUID(),
+      complaintId: selectedComplaint.id,
+      eventType: 'ImageVerified',
+      action: `Photo Verification: ${decision}`,
+      actorRole: 'Manager',
+      actorName: 'Community Manager',
+      visibility: 'internal',
+      note: `Photo evidence reviewed and ${decision.toLowerCase()} by manager.`,
+      createdAt: now,
+    });
+
+    setSelectedComplaint(updated);
+    await refreshAll();
+    const evs = await repository.getEvents(selectedComplaint.id);
+    setComplaintEvents(evs);
+    showSuccessBanner(`Photo verification decision marked: ${decision}`);
   };
 
   const handleCloseReview = () => {
@@ -822,6 +972,180 @@ export const ManagerComplaintsPage: React.FC = () => {
                 </p>
               </div>
 
+              {/* Linked Community Asset (Manual Inventory Link - NO QR) */}
+              {(selectedComplaint.assetId || selectedComplaint.assetCode) && (
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-blue-700 shrink-0" />
+                    <div>
+                      <div className="font-bold text-blue-950 flex items-center gap-1.5">
+                        <span>{selectedComplaint.assetName || 'Community Equipment'}</span>
+                        {selectedComplaint.assetCode && (
+                          <span className="font-mono text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
+                            {selectedComplaint.assetCode}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-blue-700">
+                        Linked Society Asset • Location: {selectedComplaint.block}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold">
+                    Asset Registry
+                  </span>
+                </div>
+              )}
+
+              {/* Feature 3: Explainable Priority Scoring (P = 7S + 5A + 4W + 4R) */}
+              {selectedComplaint.priorityAssessment && (
+                <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Sliders className="w-4 h-4 text-teal-700 shrink-0" />
+                      <span className="font-bold text-slate-900 text-sm">Priority Scoring Formula (P = 7S + 5A + 4W + 4R)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                        selectedComplaint.priorityAssessment.level === 'Critical' ? 'bg-red-100 text-red-800 border border-red-300' :
+                        selectedComplaint.priorityAssessment.level === 'High' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                        selectedComplaint.priorityAssessment.level === 'Medium' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                        'bg-slate-100 text-slate-800 border border-slate-300'
+                      }`}>
+                        Score: {selectedComplaint.priorityAssessment.score}/100 ({selectedComplaint.priorityAssessment.level})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOverrideNewLevel(selectedComplaint.priorityAssessment?.level || 'Medium');
+                          setOverrideReason('');
+                          setShowOverrideModal(true);
+                        }}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-[11px] font-bold border border-slate-300 transition-colors cursor-pointer"
+                      >
+                        Override Priority
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Formula Breakdown Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Safety Risk (7S)</span>
+                      <span className="text-base font-black text-slate-900">{selectedComplaint.priorityAssessment.severity}/5</span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{selectedComplaint.priorityAssessment.breakdown.safetyScore} pts</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Affected (5A)</span>
+                      <span className="text-base font-black text-slate-900">{selectedComplaint.priorityAssessment.affected}/5</span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{selectedComplaint.priorityAssessment.breakdown.affectedScore} pts</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Waiting Time (4W)</span>
+                      <span className="text-base font-black text-slate-900">{selectedComplaint.priorityAssessment.waitingTime}/5</span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{selectedComplaint.priorityAssessment.breakdown.waitingScore} pts</span>
+                    </div>
+                    <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">60d Recurrence (4R)</span>
+                      <span className="text-base font-black text-slate-900">{selectedComplaint.priorityAssessment.recurrence}/5</span>
+                      <span className="text-[10px] text-slate-500 block mt-0.5">{selectedComplaint.priorityAssessment.breakdown.recurrenceScore} pts</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                    <div className="font-mono font-bold text-teal-900">
+                      Formula: {selectedComplaint.priorityAssessment.formula}
+                    </div>
+                    <p>{selectedComplaint.priorityAssessment.explanation}</p>
+                  </div>
+
+                  {selectedComplaint.priorityAssessment.isOverridden && (
+                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-xs text-amber-800">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Priority Overridden by Manager (Original: {selectedComplaint.priorityAssessment.originalLevel})</span>
+                      </div>
+                      <p className="text-[11px] italic">
+                        "<strong>Justification:</strong> {selectedComplaint.priorityAssessment.overrideReason}"
+                      </p>
+                      <span className="text-[10px] text-amber-700 block">
+                        By {selectedComplaint.priorityAssessment.overriddenBy} on {new Date(selectedComplaint.priorityAssessment.overriddenAt || '').toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Feature 2: Smart Duplicate Review */}
+              {selectedComplaint.duplicateMatch && (
+                <div className="p-4 bg-amber-50/70 border border-amber-300 rounded-2xl space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-950 text-sm">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                      <span>Smart Duplicate Complaint Detected ({selectedComplaint.duplicateMatch.similarityScore}% Match)</span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      selectedComplaint.duplicateStatus === 'Confirmed' ? 'bg-red-100 text-red-800 border border-red-300' :
+                      selectedComplaint.duplicateStatus === 'Linked' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                      selectedComplaint.duplicateStatus === 'Dismissed' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
+                      'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}>
+                      Status: {selectedComplaint.duplicateStatus || 'Flagged for Review'}
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-amber-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-slate-900 text-xs">
+                        Matched Complaint: {selectedComplaint.duplicateMatch.matchedReference}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        {selectedComplaint.duplicateMatch.similarityScore}% Multi-Signal Overlap
+                      </span>
+                    </div>
+                    <p className="font-semibold text-slate-800">{selectedComplaint.duplicateMatch.matchedTitle}</p>
+                    <div className="text-[11px] text-slate-600">
+                      Matching signals: {selectedComplaint.duplicateMatch.factors.join(' • ')}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[11px] font-bold text-slate-700 mr-1">Manager Decision:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateAction('Confirm')}
+                      className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg font-bold text-xs cursor-pointer shadow-xs"
+                    >
+                      Confirm Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateAction('Link')}
+                      className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-bold text-xs cursor-pointer shadow-xs"
+                    >
+                      Link Complaints
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateAction('MarkSeparate')}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs cursor-pointer shadow-xs"
+                    >
+                      Mark as Separate Issue
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicateAction('Dismiss')}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer"
+                    >
+                      Dismiss Flag
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 italic">
+                    System policy: Complaints are never auto-deleted. Managers retain full authority to confirm, link, or mark issues separate.
+                  </p>
+                </div>
+              )}
+
               {/* AI Complaint Intake & Routing Details */}
               {(selectedComplaint.source === 'WhatsApp' ||
                 selectedComplaint.source === 'Mock WhatsApp' ||
@@ -1205,48 +1529,77 @@ export const ManagerComplaintsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Manager Actions on Suspicious Flag */}
-                  {selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags && (
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
-                      <button
-                        type="button"
-                        onClick={handleDismissSuspiciousFlag}
-                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                      >
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Dismiss Suspicious Flag</span>
-                      </button>
+                  {/* Manager Decisions on Photo Verification */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
+                    <span className="text-[11px] font-bold text-slate-700 mr-1">Verification Decision:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleImageReviewDecision('Approved')}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors ${
+                        selectedComplaint.managerReviewDecision === 'Approved'
+                          ? 'bg-emerald-800 text-white'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>{selectedComplaint.managerReviewDecision === 'Approved' ? 'Photo Approved' : 'Approve Photo'}</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCorrectionReason(
-                            'Please upload a clear, original photograph taken directly at the location of the issue.'
-                          );
-                          setShowCorrectionModal(true);
-                        }}
-                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
-                        <span>Request Photo Correction</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => handleImageReviewDecision('Flagged')}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors ${
+                        selectedComplaint.managerReviewDecision === 'Flagged'
+                          ? 'bg-rose-800 text-white'
+                          : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>{selectedComplaint.managerReviewDecision === 'Flagged' ? 'Photo Flagged' : 'Flag for Investigation'}</span>
+                    </button>
 
-                      {selectedComplaint.visualCategorySuggested &&
-                        selectedComplaint.visualCategorySuggested !== 'Uncertain' &&
-                        selectedComplaint.visualCategorySuggested !== selectedComplaint.category && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNewCategory(selectedComplaint.visualCategorySuggested as ComplaintCategory);
-                            }}
-                            className="px-3 py-1.5 bg-teal-100 hover:bg-teal-200 text-teal-900 border border-teal-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-teal-700" />
-                            <span>Reassign to {selectedComplaint.visualCategorySuggested}</span>
-                          </button>
-                        )}
-                    </div>
-                  )}
+                    {selectedComplaint.isSuspicious && !selectedComplaint.dismissedSuspiciousFlags && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleDismissSuspiciousFlag}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Dismiss Suspicious Flag</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCorrectionReason(
+                              'Please upload a clear, original photograph taken directly at the location of the issue.'
+                            );
+                            setShowCorrectionModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Request Photo Correction</span>
+                        </button>
+                      </>
+                    )}
+
+                    {selectedComplaint.visualCategorySuggested &&
+                      selectedComplaint.visualCategorySuggested !== 'Uncertain' &&
+                      selectedComplaint.visualCategorySuggested !== selectedComplaint.category && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewCategory(selectedComplaint.visualCategorySuggested as ComplaintCategory);
+                          }}
+                          className="px-3 py-1.5 bg-teal-100 hover:bg-teal-200 text-teal-900 border border-teal-300 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-teal-700" />
+                          <span>Reassign to {selectedComplaint.visualCategorySuggested}</span>
+                        </button>
+                      )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1409,6 +1762,60 @@ export const ManagerComplaintsPage: React.FC = () => {
                 2. Assign Maintenance Worker
               </h3>
 
+              {/* Smart Worker Recommendation Engine */}
+              {workerRecommendations.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                    AI Worker Recommendation Engine (Ranked by Category, Skills, Workload & Rating):
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {workerRecommendations.slice(0, 3).map((rec, idx) => (
+                      <div
+                        key={rec.worker.id}
+                        className={`p-3 rounded-xl border text-xs space-y-1.5 transition-all ${
+                          selectedWorkerId === rec.worker.id
+                            ? 'bg-teal-50/80 border-teal-500 ring-1 ring-teal-500'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-slate-100 font-bold text-[10px] flex items-center justify-center text-slate-700">
+                              #{idx + 1}
+                            </span>
+                            <strong className="text-slate-900">{rec.worker.name}</strong>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold text-[10px]">
+                            {rec.matchScore}% Match
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {rec.worker.specialty} • Active: {rec.activeTaskCount}
+                        </div>
+                        <div className="flex flex-wrap gap-1 text-[10px]">
+                          {rec.reasons.map((r, rIdx) => (
+                            <span key={rIdx} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                              ✓ {r}
+                            </span>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedWorkerId(rec.worker.id)}
+                          className={`w-full py-1.5 rounded-lg font-bold text-[11px] transition-colors cursor-pointer ${
+                            selectedWorkerId === rec.worker.id
+                              ? 'bg-teal-800 text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {selectedWorkerId === rec.worker.id ? 'Selected' : 'Select Worker'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {workers.length === 0 ? (
                 <div className="text-xs text-amber-800 p-2.5 bg-amber-50 rounded-lg border border-amber-200">
                   No worker profiles available. Please create workers in the Workers tab before assigning.
@@ -1433,7 +1840,7 @@ export const ManagerComplaintsPage: React.FC = () => {
                     type="button"
                     onClick={handleAssignWorker}
                     disabled={!selectedWorkerId}
-                    className="px-4 py-2 bg-teal-800 hover:bg-teal-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    className="px-4 py-2 bg-teal-800 hover:bg-teal-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <UserCheck className="w-4 h-4" />
                     <span>{selectedComplaint.assignedWorkerId ? 'Reassign Worker' : 'Assign Worker'}</span>
@@ -1620,6 +2027,67 @@ export const ManagerComplaintsPage: React.FC = () => {
               className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold disabled:opacity-50"
             >
               Send Correction Request
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Priority Override Modal */}
+      <Modal
+        isOpen={showOverrideModal}
+        onClose={() => setShowOverrideModal(false)}
+        title="Override Operational Priority"
+        maxWidth="md"
+      >
+        <form onSubmit={handleApplyPriorityOverride} className="space-y-4 text-xs">
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">
+            <strong>Manager Override Policy:</strong> Adjusting system priority requires a documented justification reason that is permanently recorded in the audit trail.
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Target Priority Level <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={overrideNewLevel}
+              onChange={(e) => setOverrideNewLevel(e.target.value as any)}
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-1 focus:ring-teal-700 bg-white"
+            >
+              <option value="Low">Low Priority (0 - 29 pts)</option>
+              <option value="Medium">Medium Priority (30 - 49 pts)</option>
+              <option value="High">High Priority (50 - 74 pts)</option>
+              <option value="Critical">Critical Priority (75 - 100 pts)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Mandatory Override Justification <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder="e.g. Elderly resident lives alone on 4th floor; expedited response required regardless of standard queue position..."
+              rows={3}
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-1 focus:ring-teal-700 bg-white"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowOverrideModal(false)}
+              className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!overrideReason.trim()}
+              className="px-4 py-2 bg-teal-800 hover:bg-teal-700 text-white rounded-xl font-bold disabled:opacity-50 cursor-pointer"
+            >
+              Confirm & Save Override
             </button>
           </div>
         </form>

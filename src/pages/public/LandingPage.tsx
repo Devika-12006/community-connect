@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { authService } from '../../services/authService';
 import {
   Camera,
   MapPin,
@@ -16,8 +17,11 @@ import {
   LogOut,
   AlertCircle,
   X,
-  Plus,
   MessageSquare,
+  Lock,
+  UserPlus,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { WhatsAppSimulatorModal } from '../../components/whatsapp/WhatsAppSimulatorModal';
@@ -26,8 +30,6 @@ export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const {
-    residents,
-    workers,
     login,
     logout,
     isAuthenticated,
@@ -49,6 +51,151 @@ export const LandingPage: React.FC = () => {
   const [resBlock, setResBlock] = useState(settings.blocks[0] || 'Block A');
   const [resFlat, setResFlat] = useState('');
   const [setupError, setSetupError] = useState('');
+
+  // Enhanced Authentication System
+  const [authTab, setAuthTab] = useState<'credentials' | 'register' | 'demo'>('credentials');
+
+  // Credentials Login State
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Resident Registration State
+  const [regName, setRegName] = useState('');
+  const [regUsername, setRegUsername] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regBlock, setRegBlock] = useState(settings.blocks[0] || 'Block A');
+  const [regFlat, setRegFlat] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regError, setRegError] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Password Reset State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const passwordStrength = useMemo(() => {
+    return {
+      length: regPassword.length >= 8,
+      upper: /[A-Z]/.test(regPassword),
+      number: /[0-9]/.test(regPassword),
+      special: /[!@#$%^&*(),.?":{}|<>]/.test(regPassword),
+    };
+  }, [regPassword]);
+
+  const handleCredentialsLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setIsLoggingIn(true);
+    try {
+      const res = await authService.login(loginIdentifier, loginPassword);
+      if (!res.success) {
+        setLoginError(res.error || 'Invalid credentials.');
+        return;
+      }
+      login(res.role || 'Resident', res.residentId, res.workerId);
+      setShowRoleModal(false);
+      if (res.role === 'Manager') navigate('/manager/overview');
+      else if (res.role === 'Worker') navigate('/worker/tasks');
+      else navigate(targetRoute || '/resident/home');
+    } catch (err: any) {
+      setLoginError(err.message || 'Authentication error.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleResidentRegistration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError(null);
+    if (!regName.trim() || !regUsername.trim() || !regEmail.trim() || !regFlat.trim()) {
+      setRegError('Please complete all required fields.');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setRegError('Passwords do not match.');
+      return;
+    }
+    setIsRegistering(true);
+    try {
+      const res = await authService.registerResident({
+        fullName: regName.trim(),
+        username: regUsername.trim(),
+        email: regEmail.trim(),
+        password: regPassword,
+        block: regBlock,
+        flatNumber: regFlat.trim(),
+        phone: regPhone.trim() || undefined,
+      });
+      if (!res.success) {
+        setRegError(res.error || 'Registration failed.');
+        return;
+      }
+      login('Resident', res.residentId);
+      setShowRoleModal(false);
+      navigate(targetRoute || '/resident/home');
+    } catch (err: any) {
+      setRegError(err.message || 'Registration failed.');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError(null);
+    setResetSuccess(null);
+    if (!resetIdentifier.trim()) {
+      setResetError('Please enter your username.');
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetError('Passwords do not match.');
+      return;
+    }
+    setIsResetting(true);
+    try {
+      const res = await authService.resetPassword(resetIdentifier.trim(), resetNewPassword);
+      if (!res.success) {
+        setResetError(res.error || 'Password reset failed.');
+        return;
+      }
+      setResetSuccess('Password has been successfully updated! You can now log in.');
+    } catch (err: any) {
+      setResetError(err.message || 'Reset error.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handle1ClickLogin = async (username: string, pass: string) => {
+    setLoginError(null);
+    setIsLoggingIn(true);
+    try {
+      const res = await authService.login(username, pass);
+      if (!res.success) {
+        setLoginError(res.error || 'Login failed.');
+        return;
+      }
+      login(res.role || 'Resident', res.residentId, res.workerId);
+      setShowRoleModal(false);
+      if (res.role === 'Manager') navigate('/manager/overview');
+      else if (res.role === 'Worker') navigate('/worker/tasks');
+      else navigate(targetRoute || '/resident/home');
+    } catch {
+      setLoginError('Error during 1-click login.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   const handleStartReport = () => {
     if (isAuthenticated) {
@@ -368,172 +515,498 @@ export const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      {/* Account & Role Selection Modal */}
+      {/* Account & Role Selection Modal with Full Auth Capabilities */}
       <Modal
         isOpen={showRoleModal}
         onClose={() => {
           setShowRoleModal(false);
           setTargetRoute(null);
+          setLoginError(null);
+          setRegError(null);
         }}
-        title="Sign In to Community Connect"
+        title="Community Connect Authentication"
         maxWidth="md"
       >
         <div className="space-y-4">
-          <p className="text-xs text-slate-600">
-            Select an account to sign in. Each resident and worker profile maintains their own complaints and task history.
-          </p>
+          {/* Auth Mode Tabs */}
+          <div className="flex border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setAuthTab('credentials')}
+              className={`flex-1 py-2.5 text-xs font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                authTab === 'credentials'
+                  ? 'border-teal-700 text-teal-800 bg-teal-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Sign In</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthTab('register')}
+              className={`flex-1 py-2.5 text-xs font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                authTab === 'register'
+                  ? 'border-teal-700 text-teal-800 bg-teal-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Register Resident</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthTab('demo')}
+              className={`flex-1 py-2.5 text-xs font-bold text-center border-b-2 transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                authTab === 'demo'
+                  ? 'border-teal-700 text-teal-800 bg-teal-50/50'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Quick Demo</span>
+            </button>
+          </div>
 
-          <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
-            {/* 1. Resident Portal Account Selection */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">Resident Portal</div>
-                    <div className="text-[11px] text-slate-500">Report issues, track progress, rate repairs</div>
-                  </div>
+          {/* TAB 1: Credentials Login */}
+          {authTab === 'credentials' && (
+            <form onSubmit={handleCredentialsLogin} className="space-y-3.5 text-xs">
+              <p className="text-slate-600 text-xs">
+                Enter your username or email address and password to access your role portal.
+              </p>
+
+              {loginError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{loginError}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRoleModal(false);
-                    setShowResidentSetup(true);
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>New Profile</span>
-                </button>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Username or Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  placeholder="e.g. manager or resident_devika"
+                  className="w-full text-xs px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none bg-white"
+                  autoFocus
+                  required
+                />
               </div>
 
-              {residents.length === 0 ? (
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center justify-between">
-                  <span>No resident profiles exist yet.</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Password <span className="text-red-500">*</span>
+                  </label>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowRoleModal(false);
-                      setShowResidentSetup(true);
-                    }}
-                    className="font-bold text-teal-800 hover:underline"
+                    onClick={() => setShowResetModal(true)}
+                    className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold cursor-pointer"
                   >
-                    Create Resident &rarr;
+                    Forgot password?
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Sign in as Resident:
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {residents.map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => {
-                          setShowRoleModal(false);
-                          login('Resident', r.id);
-                          navigate(targetRoute || '/resident/home');
-                        }}
-                        className="p-2.5 rounded-lg border border-slate-200 hover:border-teal-600 bg-slate-50/60 hover:bg-teal-50 text-left transition-all flex items-center justify-between cursor-pointer group"
-                      >
-                        <div className="truncate pr-2">
-                          <div className="text-xs font-bold text-slate-800 group-hover:text-teal-900 truncate">
-                            {r.displayName}
-                          </div>
-                          <div className="text-[10px] text-slate-500 truncate">
-                            {r.block} • Flat {r.flatNumber}
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-700 shrink-0" />
-                      </button>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Enter your account password"
+                  className="w-full text-xs px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none bg-white"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-2.5 bg-teal-800 hover:bg-teal-700 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs"
+              >
+                {isLoggingIn ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Verifying Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    <span>Sign In</span>
+                  </>
+                )}
+              </button>
+
+              <div className="pt-2 text-center text-slate-500 text-[11px]">
+                Testing? Use the <button type="button" onClick={() => setAuthTab('demo')} className="text-teal-800 font-bold hover:underline">Quick Demo tab</button> for 1-click evaluator login.
+              </div>
+            </form>
+          )}
+
+          {/* TAB 2: Resident Registration */}
+          {authTab === 'register' && (
+            <form onSubmit={handleResidentRegistration} className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+              <p className="text-slate-600 text-xs">
+                Register as a new community resident. Password hashing (SHA-256 with salt) and complexity rules are enforced.
+              </p>
+
+              {regError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{regError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Priya Sharma"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Username <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={regUsername}
+                    onChange={(e) => setRegUsername(e.target.value)}
+                    placeholder="e.g. priya_s"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  placeholder="e.g. priya@society.org"
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Block / Wing <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={regBlock}
+                    onChange={(e) => setRegBlock(e.target.value)}
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none bg-white"
+                  >
+                    {settings.blocks.map((b) => (
+                      <option key={b} value={b}>{b}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Flat Number <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={regFlat}
+                    onChange={(e) => setRegFlat(e.target.value)}
+                    placeholder="e.g. 504"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Phone Number (Optional)
+                </label>
+                <input
+                  type="tel"
+                  value={regPhone}
+                  onChange={(e) => setRegPhone(e.target.value)}
+                  placeholder="e.g. +91 98765 43210"
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Password <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Min 8 chars, mixed case"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Confirm Password <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={regConfirmPassword}
+                    onChange={(e) => setRegConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Live Password Complexity Checklist */}
+              {regPassword.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                  <span className="font-bold text-[10px] text-slate-600 block uppercase tracking-wider">
+                    Password Security Requirements:
+                  </span>
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
+                    <span className={`flex items-center gap-1 ${passwordStrength.length ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                      {passwordStrength.length ? '✓' : '○'} At least 8 characters
+                    </span>
+                    <span className={`flex items-center gap-1 ${passwordStrength.upper ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                      {passwordStrength.upper ? '✓' : '○'} Uppercase letter
+                    </span>
+                    <span className={`flex items-center gap-1 ${passwordStrength.number ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                      {passwordStrength.number ? '✓' : '○'} Number (0-9)
+                    </span>
+                    <span className={`flex items-center gap-1 ${passwordStrength.special ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                      {passwordStrength.special ? '✓' : '○'} Special character (!@#$)
+                    </span>
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* 2. Community Manager Workspace */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3.5">
-              <div className="flex items-center justify-between">
+              <button
+                type="submit"
+                disabled={isRegistering}
+                className="w-full py-2.5 bg-teal-800 hover:bg-teal-700 text-white font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs"
+              >
+                {isRegistering ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Creating Resident Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4" />
+                    <span>Complete Resident Registration</span>
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* TAB 3: 1-Click Evaluator Demo Accounts */}
+          {authTab === 'demo' && (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1 text-xs">
+              <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-teal-950 text-xs">
+                <strong>Evaluator Quick Sign-In:</strong> Click any card below to log in immediately with pre-configured credentials and inspect that role's experience.
+              </div>
+
+              {/* Manager Demo */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-teal-700 transition-all flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-teal-800 text-white flex items-center justify-center font-bold text-xs">
+                  <div className="w-8 h-8 rounded-lg bg-teal-800 text-white flex items-center justify-center font-bold">
                     <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900">Community Manager Workspace</div>
-                    <div className="text-[11px] text-slate-500">Triage reports, assign workers, oversee community analytics</div>
+                    <div className="font-bold text-slate-900">Community Manager</div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      User: <strong>manager</strong> • Pass: <strong>Manager@123</strong>
+                    </div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowRoleModal(false);
-                    login('Manager');
-                    navigate('/manager/overview');
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold bg-teal-800 hover:bg-teal-700 text-white rounded-lg transition-colors cursor-pointer shrink-0"
+                  onClick={() => handle1ClickLogin('manager', 'Manager@123')}
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-2xs"
                 >
-                  Sign In &rarr;
+                  Log In &rarr;
                 </button>
               </div>
-            </div>
 
-            {/* 3. Maintenance Worker Portal */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
+              {/* Worker Demo: Plumber */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-amber-600 transition-all flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
+                  <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold">
                     <Wrench className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-slate-900">Maintenance Worker Portal</div>
-                    <div className="text-[11px] text-slate-500">View assigned tasks, update repair progress & upload proof</div>
+                    <div className="font-bold text-slate-900">Senior Plumber (Rajesh Kumar)</div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      User: <strong>worker_plumber</strong> • Pass: <strong>Worker@123</strong>
+                    </div>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handle1ClickLogin('worker_plumber', 'Worker@123')}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-2xs"
+                >
+                  Log In &rarr;
+                </button>
               </div>
 
-              {workers.length === 0 ? (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                  No technician accounts exist. Create a worker profile from the Manager portal.
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Sign in as Technician:
+              {/* Worker Demo: Electrician */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-amber-600 transition-all flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold">
+                    <Wrench className="w-4 h-4" />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {workers.map((w) => (
-                      <button
-                        key={w.id}
-                        type="button"
-                        onClick={() => {
-                          setShowRoleModal(false);
-                          login('Worker', undefined, w.id);
-                          navigate('/worker/tasks');
-                        }}
-                        className="p-2.5 rounded-lg border border-slate-200 hover:border-amber-600 bg-slate-50/60 hover:bg-amber-50 text-left transition-all flex items-center justify-between cursor-pointer group"
-                      >
-                        <div className="truncate pr-2">
-                          <div className="text-xs font-bold text-slate-800 group-hover:text-amber-900 truncate">
-                            {w.name}
-                          </div>
-                          <div className="text-[10px] text-slate-500 truncate">
-                            Specialty: {w.specialty}
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-700 shrink-0" />
-                      </button>
-                    ))}
+                  <div>
+                    <div className="font-bold text-slate-900">Chief Electrician (Sunil Rao)</div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      User: <strong>worker_electrician</strong> • Pass: <strong>Worker@123</strong>
+                    </div>
                   </div>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => handle1ClickLogin('worker_electrician', 'Worker@123')}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-2xs"
+                >
+                  Log In &rarr;
+                </button>
+              </div>
+
+              {/* Resident Demo: Devika */}
+              <div className="p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-600 transition-all flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">
+                    <Users className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900">Resident (Devika S - Block A, Flat 302)</div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      User: <strong>resident_devika</strong> • Pass: <strong>Resident@123</strong>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handle1ClickLogin('resident_devika', 'Resident@123')}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs cursor-pointer shadow-2xs"
+                >
+                  Log In &rarr;
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
+      </Modal>
+
+      {/* Password Reset Modal */}
+      <Modal
+        isOpen={showResetModal}
+        onClose={() => {
+          setShowResetModal(false);
+          setResetError(null);
+          setResetSuccess(null);
+        }}
+        title="Reset Account Password"
+        maxWidth="sm"
+      >
+        <form onSubmit={handlePasswordResetSubmit} className="space-y-3.5 text-xs">
+          <p className="text-slate-600 text-xs">
+            Enter your username to securely update your password with complexity verification.
+          </p>
+
+          {resetSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-semibold flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{resetSuccess}</span>
+            </div>
+          )}
+
+          {resetError && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-red-700 font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Username <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={resetIdentifier}
+              onChange={(e) => setResetIdentifier(e.target.value)}
+              placeholder="e.g. manager or resident_devika"
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              New Password (Min 8 chars, 1 uppercase, 1 number, 1 special) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="password"
+              value={resetNewPassword}
+              onChange={(e) => setResetNewPassword(e.target.value)}
+              placeholder="Enter new strong password"
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Confirm New Password <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="password"
+              value={resetConfirmPassword}
+              onChange={(e) => setResetConfirmPassword(e.target.value)}
+              placeholder="Re-enter new password"
+              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+              required
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowResetModal(false)}
+              className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              disabled={isResetting}
+              className="px-4 py-1.5 text-xs bg-teal-800 hover:bg-teal-700 text-white font-bold rounded-lg disabled:opacity-50"
+            >
+              Update Password
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Resident Quick Setup Modal */}
