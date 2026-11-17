@@ -44,7 +44,7 @@ export const GroupMessagesPage: React.FC = () => {
   // Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [sourceName, setSourceName] = useState('');
-  const [sourceType, setSourceType] = useState('WhatsApp Community Broadcast');
+  const [sourceType, setSourceType] = useState('Authorized Society Notice');
   const [messageText, setMessageText] = useState('');
   const [categoryTag, setCategoryTag] = useState<ComplaintCategory>('Streetlights');
   const [locationTag, setLocationTag] = useState('');
@@ -220,7 +220,7 @@ export const GroupMessagesPage: React.FC = () => {
         <div>
           <div className="font-bold">Privacy & Ethical Data Ingestion Policy</div>
           <div className="text-amber-800 mt-0.5 leading-relaxed">
-            Community Connect adheres to strict data privacy principles. The AI agent searches only curated records from official announcement channels, administrator broadcasts, or opted-in exports. Unauthorized WhatsApp group scraping or personal resident message extraction is strictly prohibited.
+            Community Connect adheres to strict data privacy principles. The AI agent searches only curated records from official announcement channels, administrator broadcasts, or opted-in exports. Unauthorized message scraping or personal resident message extraction is strictly prohibited.
           </div>
         </div>
       </div>
@@ -404,7 +404,7 @@ export const GroupMessagesPage: React.FC = () => {
                     onChange={(e) => setSourceType(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 focus:outline-teal-600"
                   >
-                    <option value="WhatsApp Community Broadcast">WhatsApp Community Broadcast</option>
+                    <option value="Authorized Society Notice">Authorized Society Notice</option>
                     <option value="Official Admin Notice">Official Admin Notice</option>
                     <option value="Exported CSV">Exported CSV</option>
                     <option value="Municipal Ward Bulletin">Municipal Ward Bulletin</option>

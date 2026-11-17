@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Worker History{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+  <div class="col-lg-11">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-clock-history text-primary me-2"></i> Maintenance History</h3>
+        <p class="text-muted small mb-0">Record of all completed maintenance tasks and verified repairs</p>
+      </div>
+      <a href="{{ url_for('worker.dashboard') }}" class="btn btn-outline-dark btn-sm">
+        &larr; Back to Dashboard
+      </a>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light text-muted small text-uppercase">
+            <tr>
+              <th>Ticket</th>
+              <th>Task Title</th>
+              <th>Location</th>
+              <th>Assigned / Started</th>
+              <th>Completed</th>
+              <th>Resident Rating</th>
+              <th class="text-end">Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if assignments %}
+              {% for a in assignments %}
+              <tr>
+                <td class="fw-bold font-monospace">{{ a.complaint.complaint_no }}</td>
+                <td>
+                  <div class="fw-semibold">{{ a.complaint.title }}</div>
+                  <span class="badge bg-light text-dark border">{{ a.complaint.category.name }}</span>
+                </td>
+                <td class="small text-muted"><i class="bi bi-geo-alt"></i> {{ a.complaint.location_details }}</td>
+                <td class="small text-muted">
+                  <div>Assigned: {{ a.assigned_at.strftime('%d %b %Y') }}</div>
+                  {% if a.accepted_at %}
+                    <div>Started: {{ a.accepted_at.strftime('%d %b %Y') }}</div>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">
+                  {% if a.completed_at %}
+                    <span class="text-success fw-semibold"><i class="bi bi-check2"></i> {{ a.completed_at.strftime('%d %b %Y') }}</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ a.status }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if a.complaint.feedback %}
+                    <span class="text-warning fw-bold">
+                      {% for i in range(a.complaint.feedback.rating) %}&#9733;{% endfor %}
+                    </span>
+                    <small class="text-muted ms-1">({{ a.complaint.feedback.rating }}/5)</small>
+                  {% else %}
+                    <span class="small text-muted">Pending review</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('worker.task_detail', task_id=a.id) }}" class="btn btn-sm btn-outline-primary">
+                    View
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="7" class="text-center py-5 text-muted">
+                  <i class="bi bi-folder-x fs-1"></i>
+                  <h6 class="mt-2 text-secondary">No work history recorded yet.</h6>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

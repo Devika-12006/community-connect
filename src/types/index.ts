@@ -71,6 +71,7 @@ export interface Resident {
   displayName: string;
   block: string;
   flatNumber: string;
+  residentType?: 'Owner' | 'Tenant' | 'Family Member';
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -589,8 +590,8 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
-// --- WhatsApp Integration Models ---
-export interface WhatsAppIncomingMessage {
+// --- Inbound Communication & Routing Models ---
+export interface InboundIncomingMessage {
   messageId: string;
   fromPhoneNumber: string;
   senderName?: string;
@@ -600,8 +601,9 @@ export interface WhatsAppIncomingMessage {
   mediaUrl?: string;
   rawPayload?: any;
 }
+export type WhatsAppIncomingMessage = InboundIncomingMessage;
 
-export interface WhatsAppOutgoingReply {
+export interface InboundOutgoingReply {
   id?: string;
   toPhoneNumber?: string;
   toPhone?: string;
@@ -612,8 +614,9 @@ export interface WhatsAppOutgoingReply {
   status: 'Simulated' | 'Sent' | 'Delivered' | 'Failed';
   error?: string;
 }
+export type WhatsAppOutgoingReply = InboundOutgoingReply;
 
-export interface WhatsAppIntegrationConfig {
+export interface SystemIntegrationConfig {
   id: string;
   enabled: boolean;
   mode?: 'simulator' | 'meta_cloud_api';
@@ -638,8 +641,9 @@ export interface WhatsAppIntegrationConfig {
   defaultOrganizationId?: string;
   updatedAt: string;
 }
+export type WhatsAppIntegrationConfig = SystemIntegrationConfig;
 
-export const DEFAULT_INTEGRATION_CONFIG: WhatsAppIntegrationConfig = {
+export const DEFAULT_INTEGRATION_CONFIG: SystemIntegrationConfig = {
   id: 'default-integration-config',
   enabled: true,
   mode: 'simulator',

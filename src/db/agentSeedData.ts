@@ -627,8 +627,8 @@ export const SEED_GROUP_MESSAGES: AuthorizedGroupMessage[] = [
   {
     id: 'msg-seed-1',
     organizationId: 'org-rwa-1',
-    sourceName: 'Green Meadows Resident Noticeboard (WhatsApp Official)',
-    sourceType: 'WhatsApp Community',
+    sourceName: 'Green Meadows Resident Noticeboard (Official Board)',
+    sourceType: 'Society Noticeboard',
     messageText:
       'Notice to Block B residents: Manoj Kumar (+91 98765 43212) is inspecting water pipe joints and pressure valves on the terrace. If you notice dampness or ceiling leakage, report it immediately with flat details.',
     messageTimestamp: new Date('2026-03-01T09:30:00.000Z').toISOString(),

@@ -148,7 +148,7 @@ export const NotificationsPage: React.FC = () => {
       <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-500 flex items-start gap-2">
         <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-slate-700">Demonstration Scope:</span> In-app notifications run entirely within this local browser session. This prototype does not claim or simulate external SMS, push, email, or WhatsApp dispatch.
+          <span className="font-semibold text-slate-700">Notification Policy:</span> In-app notifications update in real time. Browser and device push notifications depend on active browser permissions and system settings.
         </div>
       </div>
     </div>

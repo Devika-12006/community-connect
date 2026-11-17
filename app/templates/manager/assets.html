@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Registry & QR Management{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-3">
+  <div class="col-md-7">
+    <h3 class="fw-bold mb-1"><i class="bi bi-boxes text-primary me-2"></i> Community Infrastructure Asset Registry</h3>
+    <p class="text-muted small mb-0">Track equipment condition, preventive maintenance schedules, and QR code access</p>
+  </div>
+  <div class="col-md-5 text-md-end mt-2 mt-md-0 d-flex gap-2 justify-content-md-end">
+    <a href="{{ url_for('asset.scan_qr') }}" class="btn btn-outline-dark btn-sm">
+      <i class="bi bi-qr-code-scan me-1"></i> QR Scanner
+    </a>
+    <a href="{{ url_for('manager.add_asset') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-circle me-1"></i> Register New Asset
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light text-muted small text-uppercase">
+        <tr>
+          <th>QR</th>
+          <th>Asset Code</th>
+          <th>Asset Name</th>
+          <th>Category</th>
+          <th>Building & Location</th>
+          <th>Criticality</th>
+          <th>Condition</th>
+          <th>Status</th>
+          <th>Next Maintenance</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if assets %}
+          {% for a in assets %}
+          <tr>
+            <td style="width: 50px;">
+              {% if a.qr_code_path %}
+                <img src="{{ url_for('static', filename=a.qr_code_path) }}" alt="QR" width="40" height="40" class="border rounded">
+              {% else %}
+                <i class="bi bi-qr-code fs-3 text-muted"></i>
+              {% endif %}
+            </td>
+            <td>
+              <span class="fw-bold font-monospace text-primary">{{ a.asset_code }}</span>
+            </td>
+            <td>
+              <div class="fw-semibold">{{ a.name }}</div>
+              <small class="text-muted">{{ a.complaints.count() }} logged incidents</small>
+            </td>
+            <td><span class="badge bg-light text-dark border">{{ a.category }}</span></td>
+            <td>
+              <div>{{ a.building }}</div>
+              <small class="text-muted">{{ a.location }}</small>
+            </td>
+            <td>
+              <span class="badge bg-secondary font-monospace">{{ a.criticality }} / 5</span>
+            </td>
+            <td>
+              {% if a.condition in ['Good', 'Excellent'] %}
+                <span class="badge bg-success">{{ a.condition }}</span>
+              {% elif a.condition == 'Fair' %}
+                <span class="badge bg-warning text-dark">{{ a.condition }}</span>
+              {% else %}
+                <span class="badge bg-danger">{{ a.condition }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if a.status == 'Operational' %}
+                <span class="badge bg-success">Operational</span>
+              {% elif a.status == 'Under Maintenance' %}
+                <span class="badge bg-warning text-dark">Under Maintenance</span>
+              {% elif a.status == 'Degraded' %}
+                <span class="badge bg-danger">Degraded</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ a.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if a.next_maintenance_date %}
+                {% if a.is_due_for_maintenance %}
+                  <span class="badge bg-danger">Overdue: {{ a.next_maintenance_date.strftime('%d %b %Y') }}</span>
+                {% else %}
+                  <small class="text-muted">{{ a.next_maintenance_date.strftime('%d %b %Y') }}</small>
+                {% endif %}
+              {% else %}
+                <small class="text-muted">Not scheduled</small>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{{ url_for('manager.asset_detail', asset_id=a.id) }}" class="btn btn-sm btn-outline-primary">
+                View &rarr;
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" class="text-center py-5 text-muted">
+              <i class="bi bi-boxes fs-1"></i>
+              <h6 class="mt-2 text-secondary">No assets registered yet.</h6>
+              <a href="{{ url_for('manager.add_asset') }}" class="btn btn-sm btn-primary mt-2">Register First Asset</a>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

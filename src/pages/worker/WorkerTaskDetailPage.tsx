@@ -232,15 +232,17 @@ export const WorkerTaskDetailPage: React.FC = () => {
           ? { latitude: task.latitude, longitude: task.longitude, accuracy: 50 }
           : null;
 
-      const discrepancyCheck = checkLocationDiscrepancy(
-        {
-          latitude: result.geoData.latitude,
-          longitude: result.geoData.longitude,
-          accuracy: result.geoData.accuracy,
-        },
-        taskCoords,
-        250 // 250m community tolerance
-      );
+      const discrepancyCheck = result.geoData
+        ? checkLocationDiscrepancy(
+            {
+              latitude: result.geoData.latitude,
+              longitude: result.geoData.longitude,
+              accuracy: result.geoData.accuracy,
+            },
+            taskCoords,
+            250 // 250m community tolerance
+          )
+        : undefined;
 
       const newRecord: CompletionImageFile = {
         id: crypto.randomUUID(),

@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Report Maintenance Issue{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+  <div class="col-lg-10">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-tools text-primary me-2"></i> Report Maintenance Issue</h3>
+        <p class="text-muted small mb-0">Submit a new maintenance request with automatic priority scoring and duplicate checking</p>
+      </div>
+      <a href="{{ url_for('asset.scan_qr') }}" class="btn btn-outline-dark btn-sm">
+        <i class="bi bi-qr-code-scan me-1"></i> Scan Asset QR First
+      </a>
+    </div>
+
+    <!-- Live Duplicate Detection Warning Banner -->
+    <div id="duplicateAlert" class="alert alert-warning border-warning shadow-sm d-none mb-4" role="alert">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-exclamation-triangle-fill fs-5 text-warning"></i>
+        <strong class="text-dark">Potential Duplicate or Related Active Complaints Detected:</strong>
+      </div>
+      <p class="small text-muted mb-2">
+        Similar issues were recently submitted. Please check if your issue is already being addressed to prevent duplicate work orders:
+      </p>
+      <div id="duplicateList" class="list-group list-group-flush border rounded bg-white small"></div>
+    </div>
+
+    <form method="POST" action="{{ url_for('resident.submit_complaint') }}" enctype="multipart/form-data" id="complaintForm">
+      <div class="row g-4">
+        <!-- Left Column: Form Details -->
+        <div class="col-lg-7">
+          <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3">
+              <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-card-text text-primary me-2"></i> Incident Details</h6>
+            </div>
+            <div class="card-body p-4">
+              <!-- Title -->
+              <div class="mb-3">
+                <label for="title" class="form-label fw-semibold">Complaint Title *</label>
+                <input type="text" class="form-control" id="title" name="title" placeholder="e.g. Passenger Elevator 1 stopped between 4th and 5th floor" required>
+              </div>
+
+              <!-- Category -->
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label for="category_id" class="form-label fw-semibold">Category *</label>
+                  <select class="form-select" id="category_id" name="category_id" required>
+                    <option value="">Select Category...</option>
+                    {% for cat in categories %}
+                      <option value="{{ cat.id }}" data-criticality="{{ cat.default_criticality }}">
+                        {{ cat.name }} (Criticality: {{ cat.default_criticality }}/5)
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <!-- Asset Selection / QR Pre-fill -->
+                <div class="col-md-6">
+                  <label for="asset_id" class="form-label fw-semibold">
+                    Associated Asset (Optional)
+                  </label>
+                  <select class="form-select" id="asset_id" name="asset_id">
+                    <option value="">No specific asset / General common area</option>
+                    {% for a in assets %}
+                      <option value="{{ a.id }}" data-criticality="{{ a.criticality }}" data-code="{{ a.asset_code }}" data-location="{{ a.location }}"
+                        {% if selected_asset and selected_asset.id == a.id %}selected{% endif %}>
+                        [{{ a.asset_code }}] {{ a.name }} ({{ a.building }})
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <!-- Location Details -->
+              <div class="mb-3">
+                <label for="location_details" class="form-label fw-semibold">Specific Location *</label>
+                <div class="input-group">
+                  <span class="input-group-text bg-light"><i class="bi bi-geo-alt"></i></span>
+                  <input type="text" class="form-control" id="location_details" name="location_details" 
+                    placeholder="e.g. Tower A, 4th Floor Corridor near Flat 402" 
+                    value="{% if selected_asset %}{{ selected_asset.location }}{% endif %}" required>
+                </div>
+              </div>
+
+              <!-- Description -->
+              <div class="mb-3">
+                <label for="description" class="form-label fw-semibold">Detailed Description *</label>
+                <textarea class="form-control" id="description" name="description" rows="4" 
+                  placeholder="Describe the issue, symptoms, sounds, leaks, when it began, or any safety precautions taken..." required></textarea>
+              </div>
+
+              <!-- Photo Upload -->
+              <div class="mb-3">
+                <label for="photo" class="form-label fw-semibold">Attach Photograph (Optional)</label>
+                <input class="form-control" type="file" id="photo" name="photo" accept="image/*">
+                <div class="form-text">Supported formats: JPG, PNG, WEBP (Max 16MB). Clear photographs significantly expedite resolution.</div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Priority Matrix Variables & Live Preview -->
+        <div class="col-lg-5">
+          <div class="card shadow-sm border-0 mb-4 sticky-top" style="top: 80px;">
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+              <h6 class="mb-0 fw-bold"><i class="bi bi-cpu text-warning me-2"></i> Priority Matrix Input</h6>
+              <span class="badge bg-secondary">Formula Driven</span>
+            </div>
+            <div class="card-body p-4">
+              <div class="alert alert-light border small text-muted mb-3">
+                Priority score is computed automatically via:
+                <div class="fw-bold text-dark mt-1">P = (7 &times; S) + (5 &times; A) + (4 &times; W) + (4 &times; R)</div>
+              </div>
+
+              <!-- Variable 1: Severity (S) -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="severity" class="form-label fw-semibold mb-0">Severity Level (S)</label>
+                  <span class="badge bg-primary fs-6" id="severityBadge">3 / 5</span>
+                </div>
+                <input type="range" class="form-range" id="severity" name="severity" min="1" max="5" value="3" step="1">
+                <div class="small text-muted" id="severityDesc">Level 3: Moderate Functional Inconvenience</div>
+              </div>
+
+              <!-- Variable 2: Asset Criticality (A) - Computed from category/asset -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label class="form-label fw-semibold mb-0">Asset Criticality (A)</label>
+                  <span class="badge bg-info text-dark fs-6" id="criticalityBadge">3 / 5</span>
+                </div>
+                <div class="small text-muted" id="criticalityDesc">Auto-determined from asset or category registry</div>
+              </div>
+
+              <!-- Variable 3: Work Impact (W) -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="work_impact" class="form-label fw-semibold mb-0">Work Impact (W)</label>
+                  <span class="badge bg-primary fs-6" id="impactBadge">2 / 5</span>
+                </div>
+                <input type="range" class="form-range" id="work_impact" name="work_impact" min="1" max="5" value="2" step="1">
+                <div class="small text-muted" id="impactDesc">Level 2: Multiple Flats / Corridor Affected</div>
+              </div>
+
+              <!-- Variable 4: Recurrence (R) -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label class="form-label fw-semibold mb-0">Historical Recurrence (R)</label>
+                  <span class="badge bg-secondary fs-6" id="recurrenceBadge">1 / 5</span>
+                </div>
+                <div class="small text-muted">Calculated on submission from 60-day historical database records</div>
+              </div>
+
+              <hr>
+
+              <!-- Live Calculated Score Preview Card -->
+              <div class="p-3 rounded-3 text-center mb-3 bg-light border" id="previewBox">
+                <div class="text-muted small fw-semibold text-uppercase">Estimated Initial Priority</div>
+                <div class="display-6 fw-bold mt-1" id="previewScore">48</div>
+                <div class="mt-2">
+                  <span class="badge bg-info text-dark px-3 py-2 fs-6" id="previewLevelBadge">Medium Priority</span>
+                </div>
+                <div class="small text-muted mt-2 font-monospace" id="previewFormula">
+                  P = (7&times;3) + (5&times;3) + (4&times;2) + (4&times;1) = 48
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-lg w-100 py-3 fw-bold shadow-sm">
+                <i class="bi bi-send-fill me-2"></i> Submit Complaint
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Priority Calculator & Live Duplicate Detection
+const severityInput = document.getElementById('severity');
+const impactInput = document.getElementById('work_impact');
+const categorySelect = document.getElementById('category_id');
+const assetSelect = document.getElementById('asset_id');
+
+const severityBadge = document.getElementById('severityBadge');
+const severityDesc = document.getElementById('severityDesc');
+const criticalityBadge = document.getElementById('criticalityBadge');
+const criticalityDesc = document.getElementById('criticalityDesc');
+const impactBadge = document.getElementById('impactBadge');
+const impactDesc = document.getElementById('impactDesc');
+const previewScore = document.getElementById('previewScore');
+const previewLevelBadge = document.getElementById('previewLevelBadge');
+const previewFormula = document.getElementById('previewFormula');
+
+const severityLabels = {
+  1: "Level 1: Minor / Cosmetic Inconvenience",
+  2: "Level 2: Low Functional Impact",
+  3: "Level 3: Moderate Functional Inconvenience",
+  4: "Level 4: Major Disruption to Daily Operations",
+  5: "Level 5: Safety Hazard / Urgent Emergency"
+};
+
+const impactLabels = {
+  1: "Level 1: Single Apartment Only",
+  2: "Level 2: Multiple Flats / Corridor Affected",
+  3: "Level 3: Wing / Entire Floor Affected",
+  4: "Level 4: Entire Building Block Affected",
+  5: "Level 5: Entire Gated Community Affected"
+};
+
+function getAssetCriticality() {
+  const selectedAssetOpt = assetSelect.options[assetSelect.selectedIndex];
+  if (selectedAssetOpt && selectedAssetOpt.value) {
+    return parseInt(selectedAssetOpt.getAttribute('data-criticality')) || 3;
+  }
+  const selectedCatOpt = categorySelect.options[categorySelect.selectedIndex];
+  if (selectedCatOpt && selectedCatOpt.value) {
+    return parseInt(selectedCatOpt.getAttribute('data-criticality')) || 3;
+  }
+  return 3;
+}
+
+function updatePriorityPreview() {
+  const s = parseInt(severityInput.value) || 3;
+  const a = getAssetCriticality();
+  const w = parseInt(impactInput.value) || 2;
+  const r = 1; // Base recurrence before DB lookup
+
+  severityBadge.textContent = `${s} / 5`;
+  severityDesc.textContent = severityLabels[s] || '';
+  
+  criticalityBadge.textContent = `${a} / 5`;
+  impactBadge.textContent = `${w} / 5`;
+  impactDesc.textContent = impactLabels[w] || '';
+
+  const score = (7 * s) + (5 * a) + (4 * w) + (4 * r);
+  previewScore.textContent = score;
+  previewFormula.textContent = `P = (7×${s}) + (5×${a}) + (4×${w}) + (4×${r}) = ${score}`;
+
+  let level = 'Low';
+  let badgeClass = 'bg-secondary text-white';
+  if (score >= 75) {
+    level = 'Critical Priority';
+    badgeClass = 'bg-danger text-white';
+  } else if (score >= 55) {
+    level = 'High Priority';
+    badgeClass = 'bg-warning text-dark';
+  } else if (score >= 35) {
+    level = 'Medium Priority';
+    badgeClass = 'bg-info text-dark';
+  } else {
+    level = 'Low Priority';
+    badgeClass = 'bg-secondary text-white';
+  }
+
+  previewLevelBadge.textContent = level;
+  previewLevelBadge.className = `badge ${badgeClass} px-3 py-2 fs-6`;
+}
+
+severityInput.addEventListener('input', updatePriorityPreview);
+impactInput.addEventListener('input', updatePriorityPreview);
+categorySelect.addEventListener('change', updatePriorityPreview);
+assetSelect.addEventListener('change', function() {
+  const selectedOpt = assetSelect.options[assetSelect.selectedIndex];
+  if (selectedOpt && selectedOpt.value) {
+    const loc = selectedOpt.getAttribute('data-location');
+    if (loc && !document.getElementById('location_details').value) {
+      document.getElementById('location_details').value = loc;
+    }
+  }
+  updatePriorityPreview();
+  triggerDuplicateCheck();
+});
+
+// Live Duplicate Detection Debounce
+let debounceTimer;
+const titleInput = document.getElementById('title');
+const descInput = document.getElementById('description');
+const duplicateAlert = document.getElementById('duplicateAlert');
+const duplicateList = document.getElementById('duplicateList');
+
+function triggerDuplicateCheck() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    const title = titleInput.value.trim();
+    const desc = descInput.value.trim();
+    const catId = categorySelect.value;
+    const assetId = assetSelect.value;
+    const loc = document.getElementById('location_details').value.trim();
+
+    if (title.length < 4 && desc.length < 5) {
+      duplicateAlert.classList.add('d-none');
+      return;
+    }
+
+    fetch('/api/check-duplicates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: title,
+        description: desc,
+        category_id: catId,
+        asset_id: assetId,
+        location_details: loc
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.matches && data.matches.length > 0) {
+        duplicateList.innerHTML = '';
+        data.matches.forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'list-group-item p-2 d-flex justify-content-between align-items-center';
+          item.innerHTML = `
+            <div>
+              <strong>#${m.complaint_no}</strong>: ${m.title}
+              <div class="text-muted" style="font-size: 11px;">Status: <span class="badge bg-secondary">${m.status}</span> &bull; Match: ${m.confidence} (${m.reasons.join(', ')})</div>
+            </div>
+            <a href="/resident/complaints/${m.id}" target="_blank" class="btn btn-sm btn-outline-secondary py-0">View</a>
+          `;
+          duplicateList.appendChild(item);
+        });
+        duplicateAlert.classList.remove('d-none');
+      } else {
+        duplicateAlert.classList.add('d-none');
+      }
+    })
+    .catch(() => {});
+  }, 500);
+}
+
+titleInput.addEventListener('input', triggerDuplicateCheck);
+descInput.addEventListener('input', triggerDuplicateCheck);
+updatePriorityPreview();
+</script>
+{% endblock %}

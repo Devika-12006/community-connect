@@ -4,7 +4,7 @@ import { aiComplaintService } from './aiComplaintService';
 import { contactMatchingEngine } from './contactMatchingEngine';
 import { contactService } from './contactService';
 import { groupMessageService } from './groupMessageService';
-import { whatsappService } from './whatsappService';
+import { webhookService } from './webhookService';
 import { repository } from '../db/repository';
 import type { Contact, AuthorizedGroupMessage } from '../types';
 
@@ -211,9 +211,9 @@ describe('Group Message Service (groupMessageService)', () => {
   });
 });
 
-describe('WhatsApp Service & Webhook (whatsappService)', () => {
+describe('Inbound Webhook Verification & Parsing (webhookService)', () => {
   it('validates webhook challenge when token matches', () => {
-    const result = whatsappService.verifyWebhook(
+    const result = webhookService.verifyWebhook(
       'subscribe',
       'my_secret_token_123',
       'challenge_9876',
@@ -224,7 +224,7 @@ describe('WhatsApp Service & Webhook (whatsappService)', () => {
   });
 
   it('rejects webhook handshake when token is invalid', () => {
-    const result = whatsappService.verifyWebhook(
+    const result = webhookService.verifyWebhook(
       'subscribe',
       'wrong_token',
       'challenge_9876',
@@ -233,7 +233,7 @@ describe('WhatsApp Service & Webhook (whatsappService)', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('parses incoming Meta WhatsApp Business webhook payload correctly', () => {
+  it('parses incoming webhook payload correctly', () => {
     const metaPayload = {
       object: 'whatsapp_business_account',
       entry: [
@@ -272,7 +272,7 @@ describe('WhatsApp Service & Webhook (whatsappService)', () => {
       ],
     };
 
-    const parsed = whatsappService.parseWebhookPayload(metaPayload);
+    const parsed = webhookService.parseWebhookPayload(metaPayload);
     expect(parsed).toBeTruthy();
     expect(parsed?.fromName).toBe('Priya Sharma');
     expect(parsed?.fromPhone).toBe('919876543210');

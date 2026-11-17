@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Asset {{ asset.asset_code }} - {{ asset.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+  <div class="col-lg-10">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+      <div>
+        <a href="{{ url_for('asset.scan_qr') }}" class="text-decoration-none small text-muted mb-1 d-inline-block">
+          &larr; Back to QR Scanner
+        </a>
+        <div class="d-flex align-items-center gap-2">
+          <h3 class="fw-bold mb-0 font-monospace">{{ asset.asset_code }}</h3>
+          <span class="badge 
+            {% if asset.status == 'Operational' %}bg-success
+            {% elif asset.status == 'Under Maintenance' %}bg-warning text-dark
+            {% elif asset.status == 'Degraded' %}bg-danger
+            {% else %}bg-secondary{% endif %} fs-6">
+            {{ asset.status }}
+          </span>
+          <span class="badge bg-secondary fs-6">Criticality: {{ asset.criticality }}/5</span>
+        </div>
+      </div>
+
+      <!-- Action: Report Issue on this Asset -->
+      <div>
+        {% if current_user.is_resident %}
+        <a href="{{ url_for('resident.submit_complaint', asset_code=asset.asset_code) }}" class="btn btn-primary fw-bold">
+          <i class="bi bi-plus-circle me-1"></i> Report Issue on this Asset
+        </a>
+        {% elif current_user.is_manager %}
+        <a href="{{ url_for('manager.asset_detail', asset_id=asset.id) }}" class="btn btn-outline-dark fw-semibold">
+          <i class="bi bi-gear-fill me-1"></i> Manager Console
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Main Asset Card -->
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-body p-4">
+        <div class="row g-4 align-items-center">
+          <div class="col-md-3 text-center">
+            {% if asset.qr_code_path %}
+              <img src="{{ url_for('static', filename=asset.qr_code_path) }}" alt="QR Code" class="img-fluid border rounded shadow-sm p-2 bg-white" style="max-width: 160px;">
+              <div class="small text-muted mt-2 font-monospace">{{ asset.asset_code }}</div>
+            {% else %}
+              <i class="bi bi-qr-code text-muted" style="font-size: 80px;"></i>
+            {% endif %}
+          </div>
+          <div class="col-md-9">
+            <h4 class="fw-bold text-dark mb-1">{{ asset.name }}</h4>
+            <div class="text-muted small mb-3">
+              <span class="badge bg-light text-dark border me-1">{{ asset.category }}</span>
+              &bull; <i class="bi bi-building"></i> {{ asset.building }} &bull; <i class="bi bi-geo-alt"></i> {{ asset.location }}
+            </div>
+
+            <div class="row g-3 small">
+              <div class="col-sm-4">
+                <div class="text-muted">Equipment Condition</div>
+                <div class="fw-bold">{{ asset.condition }}</div>
+              </div>
+              <div class="col-sm-4">
+                <div class="text-muted">Maintenance Frequency</div>
+                <div class="fw-bold">Every {{ asset.maintenance_frequency_days }} days</div>
+              </div>
+              <div class="col-sm-4">
+                <div class="text-muted">Next Scheduled Service</div>
+                <div class="fw-bold {% if asset.is_due_for_maintenance %}text-danger{% else %}text-success{% endif %}">
+                  {{ asset.next_maintenance_date.strftime('%d %b %Y') if asset.next_maintenance_date else 'Not scheduled' }}
+                </div>
+              </div>
+            </div>
+
+            {% if asset.notes %}
+            <div class="mt-3 p-2 bg-light rounded small text-muted border">
+              <strong>Asset Notes:</strong> {{ asset.notes }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Two-Column History Logs -->
+    <div class="row g-4">
+      <!-- Left: Recent Complaints -->
+      <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-clock-history text-primary me-2"></i> Recent Reported Issues</h6>
+            <span class="badge bg-light text-muted border">{{ recent_complaints|length }} Total</span>
+          </div>
+          <div class="card-body p-0">
+            {% if recent_complaints %}
+              <div class="list-group list-group-flush small">
+                {% for c in recent_complaints %}
+                  <div class="list-group-item p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <span class="fw-bold font-monospace">#{{ c.complaint_no }}</span>
+                      <span class="badge badge-priority-{{ c.effective_priority }}">{{ c.effective_priority }}</span>
+                    </div>
+                    <div class="fw-semibold text-dark">{{ c.title }}</div>
+                    <div class="d-flex justify-content-between align-items-center mt-2 text-muted" style="font-size: 11px;">
+                      <span>Status: <strong class="text-dark">{{ c.status }}</strong></span>
+                      <span>{{ c.created_at.strftime('%d %b %Y') }}</span>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-center py-5 text-muted">
+                <i class="bi bi-check2-circle text-success fs-1"></i>
+                <h6 class="mt-2 text-secondary">Zero issues reported on this asset.</h6>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Service & Maintenance Records -->
+      <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-wrench-adjustable text-success me-2"></i> Maintenance Overhaul Records</h6>
+            <span class="badge bg-light text-muted border">{{ maintenance_records|length }} Logs</span>
+          </div>
+          <div class="card-body p-0">
+            {% if maintenance_records %}
+              <div class="list-group list-group-flush small">
+                {% for m in maintenance_records %}
+                  <div class="list-group-item p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                      <span class="badge bg-info text-dark">{{ m.maintenance_type }} Service</span>
+                      <small class="text-muted">{{ m.completed_at.strftime('%d %b %Y') }}</small>
+                    </div>
+                    <div class="text-dark mt-1">{{ m.notes }}</div>
+                    <div class="text-muted mt-2" style="font-size: 11px;">
+                      Technician: {{ m.performed_by.user.full_name if m.performed_by else 'Vendor' }}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="text-center py-5 text-muted">
+                <i class="bi bi-tools text-secondary fs-1"></i>
+                <h6 class="mt-2 text-secondary">No recorded service records yet.</h6>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

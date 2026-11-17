@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Smart Maintenance Hub{% endblock %}
+
+{% block content %}
+<div class="row align-items-center py-5">
+  <div class="col-lg-7">
+    <div class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill mb-3">
+      <i class="bi bi-shield-check me-1"></i> Intelligent Facility Maintenance Management
+    </div>
+    <h1 class="display-4 fw-bold tracking-tight text-dark mb-3">
+      Connecting Residents, Technicians & Community Managers.
+    </h1>
+    <p class="lead text-secondary mb-4">
+      Community Connect eliminates informal WhatsApp logs and paper registers with an automated, data-driven maintenance lifecycle featuring asset QR identification, mathematical priority scoring, duplicate detection, repair evidence verification, and worker accountability.
+    </p>
+
+    <!-- Quick Role Login Actions for Academic Evaluators -->
+    <div class="card p-4 shadow-sm border-0 bg-white mb-4">
+      <h6 class="text-uppercase text-muted fw-bold small mb-3">
+        <i class="bi bi-key-fill text-warning me-1"></i> Academic Evaluator & Demo Quick Login
+      </h6>
+      <div class="row g-2">
+        <div class="col-md-4">
+          <a href="{{ url_for('auth.login') }}" onclick="localStorage.setItem('demo_role', 'resident')" class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center">
+            <i class="bi bi-person-circle fs-4 mb-1"></i>
+            <strong>Resident Portal</strong>
+            <small class="text-muted">Report & Verify</small>
+          </a>
+        </div>
+        <div class="col-md-4">
+          <a href="{{ url_for('auth.login') }}" onclick="localStorage.setItem('demo_role', 'worker')" class="btn btn-outline-success w-100 py-2 d-flex flex-column align-items-center">
+            <i class="bi bi-tools fs-4 mb-1"></i>
+            <strong>Worker Portal</strong>
+            <small class="text-muted">Execute & Upload Proof</small>
+          </a>
+        </div>
+        <div class="col-md-4">
+          <a href="{{ url_for('auth.login') }}" onclick="localStorage.setItem('demo_role', 'manager')" class="btn btn-outline-danger w-100 py-2 d-flex flex-column align-items-center">
+            <i class="bi bi-shield-lock-fill fs-4 mb-1"></i>
+            <strong>Manager Portal</strong>
+            <small class="text-muted">Triage & Analytics</small>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow border-0 overflow-hidden">
+      <div class="card-header bg-dark text-white p-3 d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-cpu text-info me-2"></i>Priority Calculation Engine</span>
+        <span class="badge bg-danger">P = 7S + 5A + 4W + 4R</span>
+      </div>
+      <div class="card-body p-4 bg-light">
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span><strong>S</strong> - Issue Severity (Weight: 7)</span>
+            <span class="text-dark fw-bold">1 - 5</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-danger" style="width: 35%"></div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span><strong>A</strong> - Asset Criticality (Weight: 5)</span>
+            <span class="text-dark fw-bold">1 - 5</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-warning" style="width: 25%"></div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span><strong>W</strong> - Work Impact (Weight: 4)</span>
+            <span class="text-dark fw-bold">1 - 5</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-info" style="width: 20%"></div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span><strong>R</strong> - Recurrence History (Weight: 4)</span>
+            <span class="text-dark fw-bold">1 - 5</span>
+          </div>
+          <div class="progress" style="height: 6px;">
+            <div class="progress-bar bg-secondary" style="width: 20%"></div>
+          </div>
+        </div>
+
+        <div class="p-3 bg-white border rounded">
+          <div class="small fw-bold text-secondary mb-1">Engine Output Range:</div>
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="badge bg-secondary">Low: &lt;35</span>
+            <span class="badge bg-info text-dark">Medium: 35-54</span>
+            <span class="badge bg-warning text-dark">High: 55-74</span>
+            <span class="badge bg-danger">Critical: &ge;75</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4 Core Technical Pillars Section -->
+<div class="row g-4 py-4">
+  <div class="col-md-3">
+    <div class="card h-100 p-4 border-0 shadow-sm">
+      <div class="fs-1 text-primary mb-2"><i class="bi bi-qr-code-scan"></i></div>
+      <h5 class="fw-bold">Asset QR System</h5>
+      <p class="text-muted small">Every community asset has a unique scannable QR label linking directly to maintenance logs, failure rates, and prefilled reporting.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card h-100 p-4 border-0 shadow-sm">
+      <div class="fs-1 text-danger mb-2"><i class="bi bi-calculator"></i></div>
+      <h5 class="fw-bold">Intelligent Priority</h5>
+      <p class="text-muted small">Multi-variable linear score (P=7S+5A+4W+4R) automatically triages urgent emergencies over routine issues.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card h-100 p-4 border-0 shadow-sm">
+      <div class="fs-1 text-warning mb-2"><i class="bi bi-layers-half"></i></div>
+      <h5 class="fw-bold">Duplicate Detection</h5>
+      <p class="text-muted small">Prevents flood of duplicate complaints using asset tracking, location clustering, and Jaccard token text similarity.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card h-100 p-4 border-0 shadow-sm">
+      <div class="fs-1 text-success mb-2"><i class="bi bi-check2-circle"></i></div>
+      <h5 class="fw-bold">Resident Verification</h5>
+      <p class="text-muted small">Workers cannot unilaterally mark tickets closed without uploading photographic evidence and obtaining resident sign-off.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

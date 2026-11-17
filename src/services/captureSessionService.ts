@@ -29,7 +29,7 @@ export interface ValidationSuccessReceipt {
   sessionId: string;
   imageHash: string;
   serverReceivedTimestamp: string;
-  geo: GeoLocationData;
+  geo?: GeoLocationData;
 }
 
 export interface ValidationFailureReceipt {
@@ -86,7 +86,7 @@ export async function validateAndConsumeSession(params: {
   role: RoleType;
   draftId: string;
   imageBlob: Blob;
-  geoData: GeoLocationData;
+  geoData?: GeoLocationData;
 }): Promise<SessionValidationReceipt> {
   const { sessionId, token, userId, role, draftId, imageBlob, geoData } = params;
 
@@ -140,31 +140,31 @@ export async function validateAndConsumeSession(params: {
     };
   }
 
-  // 6. Geolocation coordinate validation
-  if (!isValidCoordinate(geoData.latitude, geoData.longitude)) {
-    return {
-      valid: false,
-      error: `Invalid GPS coordinates (${geoData.latitude}, ${geoData.longitude}). Latitude must be between -90 and 90, longitude between -180 and 180.`,
-    };
+  // 6. Optional Geolocation coordinate validation (only checked if GPS was acquired)
+  if (geoData) {
+    if (!isValidCoordinate(geoData.latitude, geoData.longitude)) {
+      return {
+        valid: false,
+        error: `Invalid GPS coordinates (${geoData.latitude}, ${geoData.longitude}). Latitude must be between -90 and 90, longitude between -180 and 180.`,
+      };
+    }
+
+    if (typeof geoData.accuracy === 'number' && (geoData.accuracy <= 0 || geoData.accuracy > MAX_ALLOWED_ACCURACY_METERS)) {
+      return {
+        valid: false,
+        error: `GPS accuracy (±${Math.round(geoData.accuracy)}m) is insufficient. Accuracy must be under ${MAX_ALLOWED_ACCURACY_METERS}m.`,
+      };
+    }
+
+    if (geoData.locationTimestamp && !isLocationFresh(geoData.locationTimestamp, MAX_LOCATION_AGE_SECONDS, nowMs)) {
+      return {
+        valid: false,
+        error: 'Stale location reading rejected. A fresh GPS location is required at time of capture.',
+      };
+    }
   }
 
-  // 7. Accuracy threshold check
-  if (typeof geoData.accuracy !== 'number' || geoData.accuracy <= 0 || geoData.accuracy > MAX_ALLOWED_ACCURACY_METERS) {
-    return {
-      valid: false,
-      error: `GPS accuracy (±${Math.round(geoData.accuracy || 0)}m) is insufficient. Accuracy must be under ${MAX_ALLOWED_ACCURACY_METERS}m.`,
-    };
-  }
-
-  // 8. Location freshness check against server time
-  if (!isLocationFresh(geoData.locationTimestamp, MAX_LOCATION_AGE_SECONDS, nowMs)) {
-    return {
-      valid: false,
-      error: 'Stale location reading rejected. A fresh GPS location is required at time of capture.',
-    };
-  }
-
-  // 9. Image binary magic bytes and size validation
+  // 7. Image binary magic bytes and size validation
   const imageCheck = await validateImageBytes(imageBlob);
   if (!imageCheck.valid) {
     return {
@@ -173,7 +173,7 @@ export async function validateAndConsumeSession(params: {
     };
   }
 
-  // 10. Compute authoritative SHA-256 digest
+  // 8. Compute authoritative SHA-256 digest
   let imageHash = '';
   try {
     const buffer = await imageBlob.arrayBuffer();
@@ -184,7 +184,7 @@ export async function validateAndConsumeSession(params: {
     imageHash = `hash-${imageBlob.size}-${nowMs}`;
   }
 
-  // 11. Atomic consumption
+  // 9. Atomic consumption
   const serverReceivedTimestamp = new Date(nowMs).toISOString();
   session.isConsumed = true;
   session.consumedAt = serverReceivedTimestamp;
@@ -195,10 +195,12 @@ export async function validateAndConsumeSession(params: {
     sessionId: session.id,
     imageHash,
     serverReceivedTimestamp,
-    geo: {
-      ...geoData,
-      serverReceivedTimestamp,
-    },
+    geo: geoData
+      ? {
+          ...geoData,
+          serverReceivedTimestamp,
+        }
+      : undefined,
   };
 }
 

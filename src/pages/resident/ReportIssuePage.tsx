@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { repository } from '../../db/repository';
+import { validateImageFile } from '../../lib/validationUtils';
 import {
   COMPLAINT_CATEGORIES,
   type ComplaintCategory,
@@ -44,7 +45,7 @@ import {
   Eye,
   Loader2,
   Camera,
-  ShieldAlert,
+  Image,
 } from 'lucide-react';
 
 interface UploadedImageFile {
@@ -71,7 +72,6 @@ export const ReportIssuePage: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form state
-  const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ComplaintCategory>('Garbage');
   const [suggestedCat, setSuggestedCat] = useState<ComplaintCategory | null>(null);
   const [description, setDescription] = useState('');
@@ -144,13 +144,18 @@ export const ReportIssuePage: React.FC = () => {
     };
   }, [severity, affected, selectedAsset, category, block]);
 
+  // Derived issue title from first sentence of description or asset/category
+  const derivedTitle =
+    description.trim().split('\n')[0].slice(0, 75) ||
+    (selectedAsset ? `${selectedAsset.name} Maintenance` : `${category} Issue`);
+
   // Multi-signal duplicate check
   useEffect(() => {
     let isMounted = true;
-    if (title.length > 3) {
+    if (description.trim().length >= 10) {
       duplicateDetectionService
         .scanForDuplicates({
-          title,
+          title: derivedTitle,
           description,
           category,
           block,
@@ -165,11 +170,11 @@ export const ReportIssuePage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [title, description, category, block, selectedAsset]);
+  }, [derivedTitle, description, category, block, selectedAsset]);
 
   const [draftId] = useState(() => crypto.randomUUID());
   const [showCameraModal, setShowCameraModal] = useState(false);
-  const [dragOrPasteNotice, setDragOrPasteNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clean up object URLs on unmount
   useEffect(() => {
@@ -180,8 +185,8 @@ export const ReportIssuePage: React.FC = () => {
 
   // Smart assistance: category suggestion
   useEffect(() => {
-    if (title.length > 3 || description.length > 5) {
-      const match = suggestCategory(title, description);
+    if (description.trim().length >= 5) {
+      const match = suggestCategory(derivedTitle, description);
       if (match) {
         setSuggestedCat(match.category);
       } else {
@@ -190,19 +195,19 @@ export const ReportIssuePage: React.FC = () => {
     } else {
       setSuggestedCat(null);
     }
-  }, [title, description]);
+  }, [derivedTitle, description]);
 
   // Smart assistance: duplicate check
   useEffect(() => {
-    if (title.length > 3 && block) {
-      const dup = checkPossibleDuplicate(title, category, block, complaints);
+    if (description.trim().length >= 10 && block) {
+      const dup = checkPossibleDuplicate(derivedTitle, category, block, complaints);
       setDuplicateWarning(dup);
     } else {
       setDuplicateWarning({ hasDuplicate: false });
     }
-  }, [title, category, block, complaints]);
+  }, [derivedTitle, category, block, complaints]);
 
-  // Handle in-app live camera capture with server-validated session and geo-tagging
+  // Handle in-app live camera capture with optional GPS fix
   const handlePhotoCaptured = async (result: LiveCaptureResult) => {
     setUploadError(null);
     if (!activeResident) {
@@ -211,7 +216,7 @@ export const ReportIssuePage: React.FC = () => {
     }
 
     if (images.length >= 3) {
-      setUploadError('You can attach a maximum of 3 live photos.');
+      setUploadError('You can attach a maximum of 3 photographs.');
       return;
     }
 
@@ -263,17 +268,18 @@ export const ReportIssuePage: React.FC = () => {
         console.warn('Image analysis error:', inspectErr);
       }
 
-      // 3. Populate complaint location from camera GPS if not already pinned
-      setLatitude(result.geoData.latitude);
-      setLongitude(result.geoData.longitude);
-      setGeoStatus('success');
-      setGeoMessage(
-        `GPS coordinates captured from live photo: ${formatCoordinates(result.geoData.latitude, result.geoData.longitude)} (±${Math.round(result.geoData.accuracy)}m)`
-      );
+      // 3. Populate complaint location from camera GPS if acquired
+      if (result.geoData) {
+        setLatitude(result.geoData.latitude);
+        setLongitude(result.geoData.longitude);
+        setGeoStatus('success');
+        setGeoMessage(
+          `GPS coordinates captured from photo: ${formatCoordinates(result.geoData.latitude, result.geoData.longitude)} (±${Math.round(result.geoData.accuracy)}m)`
+        );
 
-      // If specificLocation is empty and reverse geocoded address is available, prefill suggestion
-      if (!specificLocation.trim() && result.geoData.address) {
-        setSpecificLocation(result.geoData.address.slice(0, 120));
+        if (!specificLocation.trim() && result.geoData.address) {
+          setSpecificLocation(result.geoData.address.slice(0, 120));
+        }
       }
 
       const id = crypto.randomUUID();
@@ -311,6 +317,85 @@ export const ReportIssuePage: React.FC = () => {
     } finally {
       setIsAnalyzingImage(false);
     }
+  };
+
+  // Process selected files from gallery or drag-drop
+  const processFiles = async (files: FileList | File[] | null) => {
+    setUploadError(null);
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    if (images.length + fileArray.length > 3) {
+      setUploadError('You can attach a maximum of 3 photographs in total.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setIsAnalyzingImage(true);
+
+    try {
+      for (const file of fileArray) {
+        const check = validateImageFile(file);
+        if (!check.valid) {
+          setUploadError(check.error || 'Invalid image file.');
+          continue;
+        }
+
+        let quality: ImageQualityReport | undefined;
+        let dHash: string | undefined;
+        let contentHash: string | undefined;
+        let reusedMatch: ReusedPhotoMatch | null = null;
+        let screenCheck: { isScreenPhoto: boolean; score: number; details?: string } | undefined;
+
+        try {
+          const canvasInspection = await inspectImageWithCanvas(file);
+          quality = canvasInspection.quality;
+          dHash = canvasInspection.dHash;
+          contentHash = await computeContentHash(file);
+
+          const existingImages = await repository.getAllImages();
+          reusedMatch = checkImageDuplicates(dHash, contentHash, existingImages, complaints);
+          screenCheck = await detectScreenOrDisplayArtifacts(file);
+        } catch (err) {
+          console.warn('Image analysis notice:', err);
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+        const record: UploadedImageFile = {
+          id: crypto.randomUUID(),
+          rawBlob: file,
+          previewUrl,
+          fileName: file.name || `photo_${Date.now().toString().slice(-6)}.jpg`,
+          quality,
+          dHash,
+          contentHash,
+          reusedMatch,
+          screenCheck,
+        };
+
+        setImages((prev) => [...prev, record]);
+
+        const hasKey = !!(settings.geminiApiKey?.trim() || (import.meta as any).env?.VITE_GEMINI_API_KEY?.trim());
+        if (hasKey && !visualResult) {
+          try {
+            const vResult = await classifyImageWithVisionModel(file, settings.geminiApiKey);
+            setVisualResult(vResult);
+            setVisualDismissed(false);
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      console.error('File upload error:', err);
+      setUploadError(err.message || 'Failed to process selected photo.');
+    } finally {
+      setIsAnalyzingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Handle gallery file selection (Desktop and Mobile)
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await processFiles(e.target.files);
   };
 
   const handleRemoveImage = (id: string) => {
@@ -356,12 +441,16 @@ export const ReportIssuePage: React.FC = () => {
   // Validation
   const validateStep1 = () => {
     setValidationError(null);
-    if (!title.trim()) {
-      setValidationError('Please provide a brief title for the issue.');
-      return false;
-    }
     if (!description.trim()) {
       setValidationError('Please describe the issue so workers can understand the repair needed.');
+      return false;
+    }
+    if (description.trim().length < 15) {
+      setValidationError('Description is too brief. Please enter at least 15 characters describing the issue.');
+      return false;
+    }
+    if (description.length > 1000) {
+      setValidationError('Description cannot exceed the maximum limit of 1000 characters.');
       return false;
     }
     return true;
@@ -464,7 +553,7 @@ export const ReportIssuePage: React.FC = () => {
         residentName: activeResident.displayName,
         residentBlock: activeResident.block,
         residentFlat: activeResident.flatNumber,
-        title: title.trim(),
+        title: derivedTitle,
         description: description.trim(),
         category,
         suggestedCategory: suggestedCat || undefined,
@@ -522,7 +611,7 @@ export const ReportIssuePage: React.FC = () => {
         recipientRole: 'Manager',
         complaintId,
         title: `New Complaint: ${reference}`,
-        message: `${activeResident.displayName} reported "${title}" in ${block} (${category}).`,
+        message: `${activeResident.displayName} reported a ${category} issue in ${block}.`,
         createdAt: now,
       });
 
@@ -654,34 +743,18 @@ export const ReportIssuePage: React.FC = () => {
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
-            setDragOrPasteNotice(
-              'Direct file dropping is disabled. Please use "Take Live Photo" to capture live evidence with camera and GPS.'
-            );
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+              processFiles(e.dataTransfer.files);
+            }
           }}
           onPaste={(e) => {
             if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
               e.preventDefault();
-              setDragOrPasteNotice(
-                'Pasting image files is disabled. Please use "Take Live Photo" to capture live evidence with camera and GPS.'
-              );
+              processFiles(e.clipboardData.files);
             }
           }}
           className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-xs space-y-5"
         >
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Issue Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Water leak near elevator landing"
-              maxLength={100}
-              className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none"
-            />
-          </div>
-
           {/* Linked Community Asset (Manual Selection Only - No QR) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -764,19 +837,47 @@ export const ReportIssuePage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Detailed Description <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Detailed Description <span className="text-red-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-500 font-mono">
+                Min 15 — Max 1000 characters
+              </span>
+            </div>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the condition, exact signs of damage, or hazard present..."
               rows={4}
+              minLength={15}
               maxLength={1000}
               className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none"
             />
-            <div className="text-right text-[11px] text-slate-400 mt-1">
-              {description.length} / 1000 characters
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-[11px] gap-1 mt-1.5">
+              <div>
+                {description.trim().length === 0 ? (
+                  <span className="text-slate-400">
+                    Minimum 15 characters required
+                  </span>
+                ) : description.trim().length < 15 ? (
+                  <span className="text-amber-600 font-semibold">
+                    {15 - description.trim().length} more character{15 - description.trim().length === 1 ? '' : 's'} needed
+                  </span>
+                ) : (
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <span>✓</span> Minimum requirement met
+                  </span>
+                )}
+              </div>
+              <div className="text-slate-500 font-mono text-right">
+                <span className={description.length >= 950 ? 'text-amber-600 font-bold' : ''}>
+                  {description.length}
+                </span> / 1000 characters
+                <span className="text-slate-400 ml-1">
+                  ({1000 - description.length} remaining)
+                </span>
+              </div>
             </div>
           </div>
 
@@ -804,90 +905,119 @@ export const ReportIssuePage: React.FC = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
-              {images.map((img, idx) => (
-                <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group shadow-2xs">
-                  <img src={img.previewUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                  
-                  {/* Quality Pill */}
-                  {img.quality?.status === 'Too Dark' && (
-                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
-                      Dark
-                    </span>
-                  )}
-                  {img.quality?.status === 'Blurry' && (
-                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
-                      Blurry
-                    </span>
-                  )}
-                  {img.quality?.status === 'Clear' && (
-                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-emerald-700 text-white text-[9px] font-bold rounded shadow-xs">
-                      Clear
-                    </span>
-                  )}
+            {/* Hidden File Input for Gallery */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={handleGalleryUpload}
+              className="hidden"
+            />
 
-                  {/* Duplicate Reused Warning Pill */}
-                  {img.reusedMatch && (
-                    <span className="absolute bottom-6 left-1.5 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded shadow-xs">
-                      Reused
-                    </span>
-                  )}
+            {/* Attached Photo Previews */}
+            {images.length > 0 && (
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                {images.map((img, idx) => (
+                  <div key={img.id} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group shadow-2xs">
+                    <img src={img.previewUrl} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                    
+                    {/* Quality Pill */}
+                    {img.quality?.status === 'Too Dark' && (
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
+                        Dark
+                      </span>
+                    )}
+                    {img.quality?.status === 'Blurry' && (
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-600 text-white text-[9px] font-bold rounded shadow-xs">
+                        Blurry
+                      </span>
+                    )}
+                    {img.quality?.status === 'Clear' && (
+                      <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-emerald-700 text-white text-[9px] font-bold rounded shadow-xs">
+                        Clear
+                      </span>
+                    )}
 
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(img.id)}
-                    className="absolute top-1.5 right-1.5 p-1 bg-black/60 hover:bg-black text-white rounded-full transition-colors"
-                    aria-label="Remove image"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-mono rounded truncate max-w-[70%]">
-                    {img.fileName}
-                  </span>
-                  {img.geo && (
-                    <span className="absolute top-1 right-8 px-1.5 py-0.5 bg-teal-900/80 text-teal-300 text-[9px] font-mono rounded flex items-center gap-1 shadow-xs">
-                      <MapPin className="w-2.5 h-2.5 text-teal-400" />
-                      <span>GPS</span>
-                    </span>
-                  )}
-                </div>
-              ))}
+                    {/* Duplicate Reused Warning Pill */}
+                    {img.reusedMatch && (
+                      <span className="absolute bottom-6 left-1.5 px-1.5 py-0.5 bg-red-600 text-white text-[9px] font-bold rounded shadow-xs">
+                        Reused
+                      </span>
+                    )}
 
-              {images.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(img.id)}
+                      className="absolute top-1.5 right-1.5 p-1 bg-black/60 hover:bg-black text-white rounded-full transition-colors"
+                      aria-label="Remove image"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/60 text-white text-[9px] font-mono rounded truncate max-w-[70%]">
+                      {img.fileName}
+                    </span>
+                    {img.geo && (
+                      <span className="absolute top-1 right-8 px-1.5 py-0.5 bg-teal-900/80 text-teal-300 text-[9px] font-mono rounded flex items-center gap-1 shadow-xs">
+                        <MapPin className="w-2.5 h-2.5 text-teal-400" />
+                        <span>GPS</span>
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Photo capture & gallery upload buttons */}
+            {images.length < 3 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
                 <button
                   type="button"
                   onClick={() => setShowCameraModal(true)}
                   disabled={isAnalyzingImage}
-                  className="aspect-square rounded-xl border-2 border-dashed border-teal-600/40 hover:border-teal-700 hover:bg-teal-50/40 flex flex-col items-center justify-center p-3 text-teal-800 transition-all cursor-pointer disabled:opacity-50"
+                  className="rounded-xl border-2 border-dashed border-teal-600/40 hover:border-teal-700 hover:bg-teal-50/40 flex items-center gap-3 p-3 text-teal-800 transition-all cursor-pointer disabled:opacity-50 text-left"
                 >
-                  <Camera className="w-6 h-6 mb-1 text-teal-700" />
-                  <span className="text-xs font-bold">Take Live Photo</span>
-                  <span className="text-[10px] text-teal-600/90 mt-0.5">In-App Camera Only</span>
+                  <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
+                    <Camera className="w-5 h-5 text-teal-700" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-slate-800">Take Live Photo</span>
+                    <span className="text-[11px] text-slate-500">Capture with device camera</span>
+                  </div>
                 </button>
-              )}
-            </div>
 
-            {/* In-App Camera Only Disclosure */}
-            <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
-              <ShieldAlert className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
-              <span>
-                <strong>Camera & Geolocation Required:</strong> Photos must be captured live at the issue location. File picking, gallery selection, and drag-and-drop are disabled.
-              </span>
-            </div>
-
-            {/* Drag or Paste blocked feedback */}
-            {dragOrPasteNotice && (
-              <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 font-medium flex items-center justify-between">
-                <span>{dragOrPasteNotice}</span>
                 <button
                   type="button"
-                  onClick={() => setDragOrPasteNotice(null)}
-                  className="text-amber-700 hover:text-amber-900 p-0.5"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isAnalyzingImage}
+                  className="rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-slate-50 flex items-center gap-3 p-3 text-slate-700 transition-all cursor-pointer disabled:opacity-50 text-left"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <Image className="w-5 h-5 text-slate-600" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block text-slate-800">Choose from Gallery</span>
+                    <span className="text-[11px] text-slate-500">JPG, PNG, WebP up to 5MB</span>
+                  </div>
                 </button>
               </div>
             )}
+
+            {/* Localized Limitations for Camera & Gallery */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
+                <Camera className="w-3.5 h-3.5 text-teal-700 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Camera Access:</strong> Requires camera permission and hardware support. Photos can be captured with or without GPS coordinates.
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
+                <Image className="w-3.5 h-3.5 text-slate-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Gallery Access:</strong> Requires photo/media access. Accepts JPG, PNG, and WebP up to 5MB.
+                </span>
+              </div>
+            </div>
 
             {/* Live Camera Modal */}
             <LiveCameraModal
@@ -1126,9 +1256,14 @@ export const ReportIssuePage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Specific Location or Landmark <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Specific Location or Landmark <span className="text-red-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-500 font-mono">
+                {specificLocation.length} / 120 characters
+              </span>
+            </div>
             <input
               type="text"
               value={specificLocation}
@@ -1137,7 +1272,44 @@ export const ReportIssuePage: React.FC = () => {
               maxLength={120}
               className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none"
             />
-            <p className="text-[11px] text-slate-400 mt-1">
+            
+            {/* Quick Society Common Area Chips */}
+            <div className="mt-2">
+              <span className="text-[11px] font-semibold text-slate-500 block mb-1.5">
+                Common society areas (click to apply):
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Clubhouse',
+                  'Lift Lobby',
+                  'Main Gate & Security',
+                  'Basement Parking (B1)',
+                  'Basement Parking (B2)',
+                  'Central Garden / Park',
+                  'Swimming Pool Deck',
+                  'Gymnasium',
+                  'Staircase Landing',
+                  'Terrace / Roof',
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      if (!specificLocation) {
+                        setSpecificLocation(chip);
+                      } else if (!specificLocation.includes(chip)) {
+                        setSpecificLocation(`${specificLocation}, ${chip}`);
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-teal-50 hover:text-teal-800 text-slate-700 text-xs border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-1.5">
               Manual location entry is always supported and helps workers find the spot quickly.
             </p>
           </div>
@@ -1173,6 +1345,14 @@ export const ReportIssuePage: React.FC = () => {
                 {geoMessage}
               </div>
             )}
+
+            {/* GPS Limitations Notice */}
+            <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-start gap-2 text-[11px] text-slate-600">
+              <Compass className="w-3.5 h-3.5 text-teal-700 shrink-0 mt-0.5" />
+              <span>
+                <strong>GPS & Location Notice:</strong> Device geolocation is optional. Accuracy depends on browser permissions, GPS hardware, and satellite reception. Manual location selection is always supported.
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">
@@ -1212,7 +1392,7 @@ export const ReportIssuePage: React.FC = () => {
           <div className="space-y-3.5 text-xs">
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Title & Category</span>
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Category & Description</span>
                 <button
                   type="button"
                   onClick={() => setCurrentStep(1)}
@@ -1221,11 +1401,10 @@ export const ReportIssuePage: React.FC = () => {
                   Edit
                 </button>
               </div>
-              <div className="text-sm font-bold text-slate-900">{title}</div>
               <div className="inline-block px-2 py-0.5 rounded bg-teal-100 text-teal-800 font-medium">
                 {category}
               </div>
-              <p className="text-slate-600 whitespace-pre-wrap mt-1">{description}</p>
+              <p className="text-slate-700 whitespace-pre-wrap mt-1 text-xs">{description}</p>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
@@ -1326,6 +1505,14 @@ export const ReportIssuePage: React.FC = () => {
                 />
               </div>
             )}
+          </div>
+
+          {/* Submission and Sync Notice */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-[11px] text-slate-600">
+            <CheckCircle2 className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+            <span>
+              <strong>Submission & Data Handling:</strong> Complaints are verified, timestamped, and dispatched immediately to management. Records are also retained in local storage for offline continuity.
+            </span>
           </div>
 
           <div className="flex items-center justify-between pt-2">

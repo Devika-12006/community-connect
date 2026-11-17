@@ -1,6 +1,7 @@
 import { repository } from '../db/repository';
 import type { RoleType, UserAccount } from '../types';
 import { SEED_SALT } from '../db/agentSeedData';
+import { validateResidentName, validateFlatNumber } from '../lib/validationUtils';
 
 export interface AuthResult {
   success: boolean;
@@ -108,7 +109,7 @@ export const authService = {
   },
 
   /**
-   * Register a new resident user
+   * Register a new resident user with comprehensive name, flat, and duplicate checks.
    */
   async registerResident(params: {
     fullName: string;
@@ -117,42 +118,81 @@ export const authService = {
     password: string;
     block: string;
     flatNumber: string;
+    residentType?: 'Owner' | 'Tenant' | 'Family Member';
     phone?: string;
   }): Promise<AuthResult> {
+    // 1. Validate complete resident name (Unicode, Indian characters, initials, spaces)
+    const nameCheck = validateResidentName(params.fullName);
+    if (!nameCheck.valid) {
+      return { success: false, error: nameCheck.error };
+    }
+    const cleanFullName = nameCheck.cleanValue!;
+
+    // 2. Validate flat / unit format
+    const flatCheck = validateFlatNumber(params.flatNumber);
+    if (!flatCheck.valid) {
+      return { success: false, error: flatCheck.error };
+    }
+    const cleanFlatNumber = flatCheck.cleanValue!;
+
+    // 3. Validate password strength
     const strength = this.validatePasswordStrength(params.password);
     if (!strength.valid) {
       return { success: false, error: strength.errors[0] };
     }
 
-    const existingUser = await repository.getUserByUsername(params.username);
+    // 4. Validate username
+    const cleanUsername = params.username.trim().toLowerCase();
+    if (!cleanUsername || cleanUsername.length < 3) {
+      return { success: false, error: 'Username must be at least 3 characters long.' };
+    }
+    const existingUser = await repository.getUserByUsername(cleanUsername);
     if (existingUser) {
       return { success: false, error: 'This username is already taken. Please choose another.' };
+    }
+
+    // 5. Prevent duplicate owner registration on the exact same block + flat
+    const residentType = params.residentType || 'Owner';
+    const allResidents = await repository.getResidents();
+    const existingFlatResident = allResidents.find(
+      (r) =>
+        r.active &&
+        r.block.trim().toLowerCase() === params.block.trim().toLowerCase() &&
+        r.flatNumber.trim().toLowerCase() === cleanFlatNumber.toLowerCase()
+    );
+
+    if (existingFlatResident && residentType === 'Owner' && existingFlatResident.residentType === 'Owner') {
+      return {
+        success: false,
+        error: `An Owner is already registered for ${params.block}, Flat ${cleanFlatNumber}. Please select "Tenant" or "Family Member", or contact management to update records.`,
+      };
     }
 
     const salt = crypto.randomUUID().slice(0, 8);
     const passwordHash = await this.hashPassword(params.password, salt);
 
-    // 1. Create resident profile
+    // 6. Create resident profile
     const resident = {
       id: crypto.randomUUID(),
-      displayName: params.fullName.trim(),
+      displayName: cleanFullName,
       block: params.block,
-      flatNumber: params.flatNumber.trim(),
+      flatNumber: cleanFlatNumber,
+      residentType,
       active: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     await repository.saveResident(resident);
 
-    // 2. Create user account
+    // 7. Create user account
     const userAccount: UserAccount = {
       id: crypto.randomUUID(),
-      username: params.username.trim().toLowerCase(),
+      username: cleanUsername,
       email: params.email.trim().toLowerCase(),
       passwordHash,
       salt,
       role: 'Resident',
-      fullName: params.fullName.trim(),
+      fullName: cleanFullName,
       phone: params.phone?.trim() || undefined,
       active: true,
       residentId: resident.id,

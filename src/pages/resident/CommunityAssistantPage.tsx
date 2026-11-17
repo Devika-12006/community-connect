@@ -130,6 +130,14 @@ export const CommunityAssistantPage: React.FC = () => {
         </button>
       </div>
 
+      {/* AI Assistant Limitation Notice */}
+      <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+        <Bot className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-bold">AI Assistant Notice & Limitations:</span> Responses are retrieved strictly from verified society knowledge items, schedules, and your personal complaint records. The assistant provides guidance and cannot place external phone calls or override security protocols.
+        </div>
+      </div>
+
       {/* Suggested Questions Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {SUGGESTED_QUESTIONS.map((item, idx) => {

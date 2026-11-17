@@ -50,7 +50,12 @@ interface AppContextValue {
   login: (role: RoleType, residentId?: string, workerId?: string) => void;
   logout: () => void;
   setRole: (role: RoleType, residentId?: string, workerId?: string) => void;
-  createResident: (displayName: string, block: string, flatNumber: string) => Promise<Resident>;
+  createResident: (
+    displayName: string,
+    block: string,
+    flatNumber: string,
+    residentType?: 'Owner' | 'Tenant' | 'Family Member'
+  ) => Promise<Resident>;
   createWorker: (name: string, specialty: string, contactNumber?: string) => Promise<Worker>;
   updateWorker: (worker: Worker) => Promise<void>;
   updateSettings: (settings: CommunitySettings) => Promise<void>;
@@ -268,21 +273,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [activeResidentId, activeWorkerId, residents, workers]);
 
-  const createResident = useCallback(async (displayName: string, block: string, flatNumber: string): Promise<Resident> => {
-    const newResident: Resident = {
-      id: crypto.randomUUID(),
-      displayName: displayName.trim(),
-      block,
-      flatNumber: flatNumber.trim(),
-      active: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await repository.saveResident(newResident);
-    setActiveResidentId(newResident.id);
-    await refreshAll();
-    return newResident;
-  }, [refreshAll]);
+  const createResident = useCallback(
+    async (
+      displayName: string,
+      block: string,
+      flatNumber: string,
+      residentType: 'Owner' | 'Tenant' | 'Family Member' = 'Owner'
+    ): Promise<Resident> => {
+      const newResident: Resident = {
+        id: crypto.randomUUID(),
+        displayName: displayName.trim(),
+        block,
+        flatNumber: flatNumber.trim(),
+        residentType,
+        active: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await repository.saveResident(newResident);
+      setActiveResidentId(newResident.id);
+      await refreshAll();
+      return newResident;
+    },
+    [refreshAll]
+  );
 
   const createWorker = useCallback(async (name: string, specialty: string, contactNumber?: string): Promise<Worker> => {
     const newWorker: Worker = {

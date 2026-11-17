@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Resident Registration{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-4">
+  <div class="col-md-7">
+    <div class="card p-4 shadow-sm border-0">
+      <div class="text-center mb-4">
+        <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex p-3 mb-2">
+          <i class="bi bi-person-plus-fill fs-3"></i>
+        </div>
+        <h3 class="fw-bold">Resident Account Registration</h3>
+        <p class="text-muted small">Join your community maintenance network to report issues and track repairs</p>
+      </div>
+
+      <form method="POST" action="{{ url_for('auth.register') }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="full_name" class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="full_name" name="full_name" required placeholder="e.g. Devika Sharma">
+          </div>
+          <div class="col-md-6">
+            <label for="username" class="form-label fw-semibold">Choose Username <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="username" name="username" required placeholder="e.g. devika_302">
+          </div>
+
+          <div class="col-md-6">
+            <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
+            <input type="email" class="form-control" id="email" name="email" required placeholder="e.g. devika@example.com">
+          </div>
+          <div class="col-md-6">
+            <label for="phone" class="form-label fw-semibold">Phone Number</label>
+            <input type="tel" class="form-control" id="phone" name="phone" placeholder="e.g. +91 98765 43210">
+          </div>
+
+          <div class="col-md-6">
+            <label for="building_block" class="form-label fw-semibold">Building / Block <span class="text-danger">*</span></label>
+            <select class="form-select" id="building_block" name="building_block" required>
+              <option value="" disabled selected>Select your block</option>
+              <option value="Block A">Block A</option>
+              <option value="Block B">Block B</option>
+              <option value="Block C">Block C</option>
+              <option value="Block D">Block D</option>
+              <option value="Clubhouse & Amenities">Clubhouse & Amenities</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="flat_no" class="form-label fw-semibold">Flat / Unit Number <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="flat_no" name="flat_no" required placeholder="e.g. 302 or Penthouse 1">
+          </div>
+
+          <div class="col-md-6">
+            <label for="password" class="form-label fw-semibold">Password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="password" name="password" required placeholder="Minimum 6 characters">
+          </div>
+          <div class="col-md-6">
+            <label for="confirm_password" class="form-label fw-semibold">Confirm Password <span class="text-danger">*</span></label>
+            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required placeholder="Re-enter password">
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+            <i class="bi bi-check2-circle me-1"></i> Complete Registration
+          </button>
+        </div>
+      </form>
+
+      <div class="text-center mt-3 pt-3 border-top">
+        <p class="text-muted small mb-0">Already registered? <a href="{{ url_for('auth.login') }}" class="text-primary fw-semibold">Sign in here</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

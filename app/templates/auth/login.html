@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Sign In{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-5">
+  <div class="col-md-5">
+    <div class="card p-4 shadow-sm border-0">
+      <div class="text-center mb-4">
+        <div class="bg-primary-subtle text-primary rounded-circle d-inline-flex p-3 mb-2">
+          <i class="bi bi-shield-lock-fill fs-3"></i>
+        </div>
+        <h3 class="fw-bold">Welcome Back</h3>
+        <p class="text-muted small">Sign in to your Community Connect portal</p>
+      </div>
+
+      <!-- Quick 1-Click Demo Switcher -->
+      <div class="bg-light p-3 rounded mb-3 border">
+        <div class="small fw-bold text-muted mb-2 text-uppercase">
+          <i class="bi bi-lightning-charge-fill text-warning me-1"></i> Quick Demo Logins:
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="fillDemoLogin('resident_devika', 'resident123')">
+            <i class="bi bi-person me-1"></i> Resident
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-success" onclick="fillDemoLogin('worker_ramesh', 'worker123')">
+            <i class="bi bi-tools me-1"></i> Worker
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="fillDemoLogin('manager_admin', 'admin123')">
+            <i class="bi bi-shield-lock me-1"></i> Manager
+          </button>
+        </div>
+      </div>
+
+      <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}">
+        <div class="mb-3">
+          <label for="username" class="form-label fw-semibold">Username or Email</label>
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-person"></i></span>
+            <input type="text" class="form-control" id="username" name="username" required placeholder="Enter username or email" autofocus>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="password" class="form-label fw-semibold">Password</label>
+          <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-lock"></i></span>
+            <input type="password" class="form-control" id="password" name="password" required placeholder="Enter your password">
+          </div>
+        </div>
+
+        <div class="mb-3 form-check">
+          <input type="checkbox" class="form-check-input" id="remember" name="remember">
+          <label class="form-check-label small text-muted" for="remember">Keep me logged in on this device</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+          <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+        </button>
+      </form>
+
+      <div class="text-center mt-4 border-top pt-3">
+        <p class="text-muted small mb-0">Are you a new resident in the community? <a href="{{ url_for('auth.register') }}" class="text-primary fw-semibold">Register here</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

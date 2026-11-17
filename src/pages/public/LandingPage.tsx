@@ -17,14 +17,13 @@ import {
   LogOut,
   AlertCircle,
   X,
-  MessageSquare,
   Lock,
   UserPlus,
   Check,
   Sparkles,
 } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
-import { WhatsAppSimulatorModal } from '../../components/whatsapp/WhatsAppSimulatorModal';
+import { validateResidentName, validateFlatNumber } from '../../lib/validationUtils';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -45,11 +44,11 @@ export const LandingPage: React.FC = () => {
 
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showResidentSetup, setShowResidentSetup] = useState(false);
-  const [showSimulator, setShowSimulator] = useState(false);
   const [targetRoute, setTargetRoute] = useState<string | null>(null);
   const [resName, setResName] = useState('');
   const [resBlock, setResBlock] = useState(settings.blocks[0] || 'Block A');
   const [resFlat, setResFlat] = useState('');
+  const [resType, setResType] = useState<'Owner' | 'Tenant' | 'Family Member'>('Owner');
   const [setupError, setSetupError] = useState('');
 
   // Enhanced Authentication System
@@ -69,6 +68,7 @@ export const LandingPage: React.FC = () => {
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regBlock, setRegBlock] = useState(settings.blocks[0] || 'Block A');
   const [regFlat, setRegFlat] = useState('');
+  const [regResidentType, setRegResidentType] = useState<'Owner' | 'Tenant' | 'Family Member'>('Owner');
   const [regPhone, setRegPhone] = useState('');
   const [regError, setRegError] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -116,7 +116,20 @@ export const LandingPage: React.FC = () => {
   const handleResidentRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError(null);
-    if (!regName.trim() || !regUsername.trim() || !regEmail.trim() || !regFlat.trim()) {
+
+    const nameCheck = validateResidentName(regName);
+    if (!nameCheck.valid) {
+      setRegError(nameCheck.error || 'Please enter a valid full name.');
+      return;
+    }
+
+    const flatCheck = validateFlatNumber(regFlat);
+    if (!flatCheck.valid) {
+      setRegError(flatCheck.error || 'Please enter a valid flat number.');
+      return;
+    }
+
+    if (!regUsername.trim() || !regEmail.trim()) {
       setRegError('Please complete all required fields.');
       return;
     }
@@ -127,12 +140,13 @@ export const LandingPage: React.FC = () => {
     setIsRegistering(true);
     try {
       const res = await authService.registerResident({
-        fullName: regName.trim(),
+        fullName: nameCheck.cleanValue!,
         username: regUsername.trim(),
         email: regEmail.trim(),
         password: regPassword,
         block: regBlock,
-        flatNumber: regFlat.trim(),
+        flatNumber: flatCheck.cleanValue!,
+        residentType: regResidentType,
         phone: regPhone.trim() || undefined,
       });
       if (!res.success) {
@@ -217,17 +231,20 @@ export const LandingPage: React.FC = () => {
 
   const handleResidentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resName.trim()) {
-      setSetupError('Please enter your full or display name.');
+    setSetupError('');
+    const nameCheck = validateResidentName(resName);
+    if (!nameCheck.valid) {
+      setSetupError(nameCheck.error || 'Please enter a valid full name.');
       return;
     }
-    if (!resFlat.trim()) {
-      setSetupError('Please enter your flat or house number.');
+    const flatCheck = validateFlatNumber(resFlat);
+    if (!flatCheck.valid) {
+      setSetupError(flatCheck.error || 'Please enter a valid flat number.');
       return;
     }
 
     try {
-      const created = await createResident(resName.trim(), resBlock, resFlat.trim());
+      const created = await createResident(nameCheck.cleanValue!, resBlock, flatCheck.cleanValue!, resType);
       login('Resident', created.id);
       setShowResidentSetup(false);
       navigate(targetRoute || '/resident/home');
@@ -357,20 +374,26 @@ export const LandingPage: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-xl mx-auto">
             <button
               type="button"
-              onClick={() => setShowSimulator(true)}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handleStartReport}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-teal-800 hover:bg-teal-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span>WhatsApp AI Hotline</span>
+              <span>Report an Issue</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
 
             <button
               type="button"
-              onClick={handleStartReport}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-teal-800 hover:bg-teal-700 text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => {
+                if (isAuthenticated) navigate('/resident/assistant');
+                else {
+                  setTargetRoute('/resident/assistant');
+                  setShowRoleModal(true);
+                }
+              }}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Web Issue Report</span>
-              <ArrowRight className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 text-teal-700" />
+              <span>Resident AI Assistant</span>
             </button>
 
             <button
@@ -702,7 +725,7 @@ export const LandingPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Block / Wing <span className="text-red-500">*</span>
@@ -720,16 +743,31 @@ export const LandingPage: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Flat Number <span className="text-red-500">*</span>
+                    Flat / Unit <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={regFlat}
                     onChange={(e) => setRegFlat(e.target.value)}
-                    placeholder="e.g. 504"
+                    placeholder="e.g. 504, B-204, Wing C-12B"
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Resident Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={regResidentType}
+                    onChange={(e) => setRegResidentType(e.target.value as any)}
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none bg-white"
+                  >
+                    <option value="Owner">Owner</option>
+                    <option value="Tenant">Tenant</option>
+                    <option value="Family Member">Family Member</option>
+                  </select>
                 </div>
               </div>
 
@@ -1039,7 +1077,7 @@ export const LandingPage: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Block / Building</label>
               <select
@@ -1053,14 +1091,26 @@ export const LandingPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Flat Number</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Flat / Unit</label>
               <input
                 type="text"
                 value={resFlat}
                 onChange={(e) => setResFlat(e.target.value)}
-                placeholder="e.g. 302"
+                placeholder="e.g. 302, B-204"
                 className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>
+              <select
+                value={resType}
+                onChange={(e) => setResType(e.target.value as any)}
+                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+              >
+                <option value="Owner">Owner</option>
+                <option value="Tenant">Tenant</option>
+                <option value="Family Member">Family Member</option>
+              </select>
             </div>
           </div>
 
@@ -1081,12 +1131,6 @@ export const LandingPage: React.FC = () => {
           </div>
         </form>
       </Modal>
-
-      {/* WhatsApp Complaint Simulator Modal */}
-      <WhatsAppSimulatorModal
-        isOpen={showSimulator}
-        onClose={() => setShowSimulator(false)}
-      />
     </div>
   );
 };

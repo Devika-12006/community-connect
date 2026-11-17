@@ -3,7 +3,6 @@ import { useApp } from '../../context/AppContext';
 import { repository } from '../../db/repository';
 import { aiComplaintService } from '../../services/aiComplaintService';
 import { contactMatchingEngine, type MatchingResult } from '../../services/contactMatchingEngine';
-import { WhatsAppSimulatorModal } from '../../components/whatsapp/WhatsAppSimulatorModal';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Link } from 'react-router-dom';
@@ -19,7 +18,6 @@ import {
   Sparkles,
   PhoneCall,
   Users,
-  MessageSquare,
   ShieldCheck,
   ArrowRight,
   Send,
@@ -28,15 +26,15 @@ import {
   HelpCircle,
   FileText,
   Layers,
+  AlertCircle,
 } from 'lucide-react';
 
 export const AIAgentDashboardPage: React.FC = () => {
-  const { complaints, refreshAll } = useApp();
+  const { complaints } = useApp();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('org-rwa-1');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [groupMessages, setGroupMessages] = useState<AuthorizedGroupMessage[]>([]);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
 
   // Quick test bench state
   const [testText, setTestText] = useState('Urgent: Water tank overflow in Block B terrace causing dampness in top floor ceiling.');
@@ -77,13 +75,11 @@ export const AIAgentDashboardPage: React.FC = () => {
     }
   };
 
-  // Filter WhatsApp complaints
-  const whatsappComplaints = complaints.filter(
-    (c) => c.source === 'WhatsApp' || c.source === 'Mock WhatsApp'
-  );
-  const autoRoutedCount = whatsappComplaints.filter((c) => (c.matchScore || 0) >= 70).length;
-  const reviewRequiredCount = whatsappComplaints.filter(
-    (c) => c.routingStatus === 'Requires Review' || c.needsClarification
+  // Evaluated complaints
+  const aiEvaluatedComplaints = complaints;
+  const autoRoutedCount = aiEvaluatedComplaints.filter((c) => (c.matchScore || 0) >= 70).length;
+  const reviewRequiredCount = aiEvaluatedComplaints.filter(
+    (c) => c.routingStatus === 'Requires Review' || c.needsClarification || c.status === 'Under Review'
   ).length;
   const verifiedContactsCount = contacts.filter((c) => c.verified && c.active).length;
 
@@ -94,25 +90,22 @@ export const AIAgentDashboardPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 flex items-center gap-1">
-              <Bot className="w-3.5 h-3.5" /> AI Routing Agent Active
+              <Bot className="w-3.5 h-3.5" /> AI Triage & Routing Engine Active
             </span>
             <span className="text-xs text-teal-300">v2.0 Architecture</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight">AI Complaint Routing Agent</h1>
           <p className="text-xs sm:text-sm text-teal-100/90 mt-1 max-w-2xl">
-            Receives issues via WhatsApp, interprets problem description with AI, cross-references verified contacts & authorized group notices, and routes tickets automatically.
+            Automatically analyzes issue text, extracts severity and category, matches verified contacts from directory & community records, and provides explainable triage recommendations.
           </p>
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsSimulatorOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Launch WhatsApp Simulator</span>
-          </button>
+      {/* Feature Limitation Notice */}
+      <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-bold">AI Advisory Notice:</span> AI categorization and worker matching suggestions are advisory. Community managers retain full authority to review, reassign, and override priority scoring.
         </div>
       </div>
 
@@ -162,11 +155,11 @@ export const AIAgentDashboardPage: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-medium">WhatsApp Received</span>
+            <span className="text-xs font-medium">Total Evaluated</span>
             <PhoneCall className="w-4 h-4 text-teal-600" />
           </div>
-          <div className="text-2xl font-black text-slate-800">{whatsappComplaints.length}</div>
-          <div className="text-[11px] text-slate-500 mt-1">Total incoming tickets</div>
+          <div className="text-2xl font-black text-slate-800">{aiEvaluatedComplaints.length}</div>
+          <div className="text-[11px] text-slate-500 mt-1">Processed community issues</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -335,27 +328,27 @@ export const AIAgentDashboardPage: React.FC = () => {
         )}
       </div>
 
-      {/* Ingested WhatsApp Complaints Table */}
+      {/* Ingested AI Complaints Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-800">Recent WhatsApp Ingested Complaints</h2>
-            <p className="text-xs text-slate-500">Live tickets processed through the AI routing engine</p>
+            <h2 className="text-base font-bold text-slate-800">Recent AI-Classified Complaints</h2>
+            <p className="text-xs text-slate-500">Live community complaints evaluated and triaged by the AI routing engine</p>
           </div>
           <Link
             to="/manager/complaints"
             className="text-xs font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1"
           >
-            <span>All Complaints</span>
+            <span>All Complaints Queue</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
-        {whatsappComplaints.length === 0 ? (
+        {aiEvaluatedComplaints.length === 0 ? (
           <div className="p-8 text-center text-slate-500 text-xs">
-            <MessageSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="font-semibold text-slate-700">No WhatsApp complaints received yet</p>
-            <p className="mt-1">Use the WhatsApp Simulator above or the test bench to dispatch a test ticket.</p>
+            <Bot className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="font-semibold text-slate-700">No complaints in database</p>
+            <p className="mt-1">New resident reports will automatically appear here with AI categorization.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -366,14 +359,13 @@ export const AIAgentDashboardPage: React.FC = () => {
                   <th className="p-3 sm:px-4">Issue Summary</th>
                   <th className="p-3 sm:px-4">Location</th>
                   <th className="p-3 sm:px-4">Category</th>
-                  <th className="p-3 sm:px-4">Reporter Phone</th>
                   <th className="p-3 sm:px-4">Match Score</th>
                   <th className="p-3 sm:px-4">Status</th>
                   <th className="p-3 sm:px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {whatsappComplaints.slice(0, 10).map((c) => (
+                {aiEvaluatedComplaints.slice(0, 10).map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-3 sm:px-4 font-mono font-bold text-teal-800">
                       {c.reference}
@@ -388,7 +380,6 @@ export const AIAgentDashboardPage: React.FC = () => {
                         {c.category}
                       </span>
                     </td>
-                    <td className="p-3 sm:px-4 font-mono text-slate-600">{c.reporterPhone}</td>
                     <td className="p-3 sm:px-4">
                       {c.matchScore !== undefined ? (
                         <span
@@ -415,7 +406,7 @@ export const AIAgentDashboardPage: React.FC = () => {
                         onClick={() => setSelectedInspectionComplaint(c)}
                         className="px-2.5 py-1 rounded bg-slate-100 hover:bg-teal-50 hover:text-teal-800 text-slate-700 font-medium transition-colors cursor-pointer"
                       >
-                        Inspect
+                        Inspect AI Match
                       </button>
                     </td>
                   </tr>
@@ -519,16 +510,6 @@ export const AIAgentDashboardPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Simulator Modal */}
-      <WhatsAppSimulatorModal
-        isOpen={isSimulatorOpen}
-        onClose={() => {
-          setIsSimulatorOpen(false);
-          refreshAll();
-        }}
-        defaultOrganizationId={selectedOrgId}
-      />
     </div>
   );
 };

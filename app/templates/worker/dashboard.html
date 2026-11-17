@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}Worker Dashboard{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-4">
+  <div class="col-md-7">
+    <h3 class="fw-bold mb-1">
+      <i class="bi bi-person-workspace text-primary me-2"></i> {{ current_user.full_name }}
+    </h3>
+    <p class="text-muted mb-0">
+      <span class="badge bg-secondary me-2">Specialty: {{ worker.specialty }}</span>
+      <span class="badge {% if worker.is_available %}bg-success{% else %}bg-warning text-dark{% endif %}">
+        {% if worker.is_available %}Available for Dispatch{% else %}On Active Work{% endif %}
+      </span>
+      &bull; Maintenance Worker Portal
+    </p>
+  </div>
+  <div class="col-md-5 text-md-end mt-3 mt-md-0 d-flex gap-2 justify-content-md-end align-items-center">
+    <div class="bg-white border rounded px-3 py-2 text-start">
+      <div class="small text-muted" style="font-size: 11px;">Resident Satisfaction</div>
+      <div class="fw-bold text-warning">
+        &#9733; {{ avg_rating }} / 5.0 <span class="text-muted fw-normal small">({{ feedback_count }} reviews)</span>
+      </div>
+    </div>
+    <a href="{{ url_for('asset.scan_qr') }}" class="btn btn-outline-dark">
+      <i class="bi bi-qr-code-scan me-1"></i> Scan Asset
+    </a>
+  </div>
+</div>
+
+<!-- Task Overview Metric Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold text-uppercase">Newly Assigned</div>
+        <div class="fs-2 fw-bold text-dark mt-1">{{ assigned_tasks|length }}</div>
+        <div class="small text-muted mt-1"><i class="bi bi-inbox-fill"></i> Pending acceptance</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card stat-card shadow-sm h-100" style="border-left-color: #2563eb;">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold text-uppercase">In Progress</div>
+        <div class="fs-2 fw-bold text-primary mt-1">{{ in_progress_tasks|length }}</div>
+        <div class="small text-muted mt-1"><i class="bi bi-tools"></i> Active maintenance</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card stat-card critical shadow-sm h-100 {% if rework_tasks|length > 0 %}bg-danger bg-opacity-10 border-danger{% endif %}">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold text-uppercase">Rework Required</div>
+        <div class="fs-2 fw-bold text-danger mt-1">{{ rework_tasks|length }}</div>
+        <div class="small text-muted mt-1">
+          {% if rework_tasks|length > 0 %}
+            <strong class="text-danger"><i class="bi bi-exclamation-octagon-fill"></i> Rejected by resident</strong>
+          {% else %}
+            <i class="bi bi-check2"></i> Zero rework
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card stat-card warning shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold text-uppercase">Pending Resident Review</div>
+        <div class="fs-2 fw-bold text-warning mt-1">{{ pending_verification_tasks|length }}</div>
+        <div class="small text-muted mt-1"><i class="bi bi-hourglass-split"></i> Awaiting verification</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REWORK ALERT (If any repairs rejected) -->
+{% if rework_tasks|length > 0 %}
+<div class="alert alert-danger shadow-sm border-danger mb-4 d-flex align-items-center justify-content-between">
+  <div class="d-flex align-items-center gap-3">
+    <div class="bg-danger text-white p-2 rounded-circle"><i class="bi bi-arrow-return-left fs-4"></i></div>
+    <div>
+      <h6 class="fw-bold mb-0">Corrective Maintenance Required ({{ rework_tasks|length }} Tasks)</h6>
+      <span class="small">Residents inspected your repair and reported incomplete work. Please view the rejection reason and perform corrective action.</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Worker Task Workspace Tabs -->
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3">
+    <ul class="nav nav-pills card-header-pills" id="taskTab" role="tablist">
+      <li class="nav-item">
+        <button class="nav-link active" id="assigned-tab" data-bs-toggle="tab" data-bs-target="#assigned-content" type="button">
+          Newly Assigned <span class="badge bg-secondary ms-1">{{ assigned_tasks|length }}</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="inprogress-tab" data-bs-toggle="tab" data-bs-target="#inprogress-content" type="button">
+          In Progress <span class="badge bg-primary ms-1">{{ in_progress_tasks|length }}</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link {% if rework_tasks|length > 0 %}text-danger fw-bold{% endif %}" id="rework-tab" data-bs-toggle="tab" data-bs-target="#rework-content" type="button">
+          Rework / Rejected <span class="badge bg-danger ms-1">{{ rework_tasks|length }}</span>
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending-content" type="button">
+          Pending Verification <span class="badge bg-warning text-dark ms-1">{{ pending_verification_tasks|length }}</span>
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card-body p-0">
+    <div class="tab-content" id="taskTabContent">
+      
+      <!-- TAB 1: NEWLY ASSIGNED -->
+      <div class="tab-pane fade show active" id="assigned-content">
+        {% if assigned_tasks %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light small text-uppercase text-muted">
+                <tr>
+                  <th>Ticket</th>
+                  <th>Priority</th>
+                  <th>Title & Location</th>
+                  <th>Deadline</th>
+                  <th>Assigned Date</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in assigned_tasks %}
+                <tr>
+                  <td class="fw-bold font-monospace">{{ a.complaint.complaint_no }}</td>
+                  <td>
+                    <span class="badge badge-priority-{{ a.complaint.effective_priority }}">
+                      {{ a.complaint.effective_priority }} ({{ a.complaint.priority_score }})
+                    </span>
+                  </td>
+                  <td>
+                    <div class="fw-semibold">{{ a.complaint.title }}</div>
+                    <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ a.complaint.location_details }}</small>
+                  </td>
+                  <td>
+                    {% if a.deadline %}
+                      <span class="small text-danger fw-semibold"><i class="bi bi-clock"></i> {{ a.deadline.strftime('%d %b, %H:%M') }}</span>
+                    {% else %}
+                      <span class="small text-muted">Standard</span>
+                    {% endif %}
+                  </td>
+                  <td class="small text-muted">{{ a.assigned_at.strftime('%d %b %Y') }}</td>
+                  <td class="text-end">
+                    <a href="{{ url_for('worker.task_detail', task_id=a.id) }}" class="btn btn-sm btn-primary">
+                      Inspect & Accept &rarr;
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-check-circle text-success fs-1"></i>
+            <h6 class="mt-2 text-secondary">No unaccepted tasks pending.</h6>
+            <p class="small text-muted">New maintenance assignments will show up here.</p>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- TAB 2: IN PROGRESS -->
+      <div class="tab-pane fade" id="inprogress-content">
+        {% if in_progress_tasks %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light small text-uppercase text-muted">
+                <tr>
+                  <th>Ticket</th>
+                  <th>Priority</th>
+                  <th>Title & Location</th>
+                  <th>Work Started</th>
+                  <th>Target Deadline</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in in_progress_tasks %}
+                <tr>
+                  <td class="fw-bold font-monospace">{{ a.complaint.complaint_no }}</td>
+                  <td>
+                    <span class="badge badge-priority-{{ a.complaint.effective_priority }}">
+                      {{ a.complaint.effective_priority }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="fw-semibold">{{ a.complaint.title }}</div>
+                    <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ a.complaint.location_details }}</small>
+                  </td>
+                  <td class="small text-muted">
+                    {{ a.accepted_at.strftime('%d %b, %H:%M') if a.accepted_at else 'In Progress' }}
+                  </td>
+                  <td>
+                    {% if a.deadline %}
+                      <span class="small text-danger fw-semibold"><i class="bi bi-clock"></i> {{ a.deadline.strftime('%d %b, %H:%M') }}</span>
+                    {% else %}
+                      <span class="small text-muted">Standard</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <a href="{{ url_for('worker.task_detail', task_id=a.id) }}" class="btn btn-sm btn-success">
+                      <i class="bi bi-camera me-1"></i> Submit Repair Evidence &rarr;
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-tools text-secondary fs-1"></i>
+            <h6 class="mt-2 text-secondary">No tasks currently in progress.</h6>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- TAB 3: REWORK / REJECTED -->
+      <div class="tab-pane fade" id="rework-content">
+        {% if rework_tasks %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 table-danger">
+              <thead class="small text-uppercase text-muted">
+                <tr>
+                  <th>Ticket</th>
+                  <th>Priority</th>
+                  <th>Title & Location</th>
+                  <th>Resident Rejection Reason</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in rework_tasks %}
+                <tr>
+                  <td class="fw-bold font-monospace">{{ a.complaint.complaint_no }}</td>
+                  <td>
+                    <span class="badge badge-priority-{{ a.complaint.effective_priority }}">
+                      {{ a.complaint.effective_priority }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="fw-semibold">{{ a.complaint.title }}</div>
+                    <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ a.complaint.location_details }}</small>
+                  </td>
+                  <td>
+                    <div class="p-2 rounded bg-white text-danger small border border-danger">
+                      <strong>Rejection Note:</strong>
+                      {% set last_update = a.complaint.latest_rework_update %}
+                      {{ last_update.comment if last_update else 'Repair not approved by resident.' }}
+                    </div>
+                  </td>
+                  <td class="text-end">
+                    <a href="{{ url_for('worker.task_detail', task_id=a.id) }}" class="btn btn-sm btn-danger fw-bold">
+                      Perform Rework &rarr;
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-shield-check text-success fs-1"></i>
+            <h6 class="mt-2 text-secondary">Zero rework orders! Great quality of work.</h6>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- TAB 4: PENDING VERIFICATION -->
+      <div class="tab-pane fade" id="pending-content">
+        {% if pending_verification_tasks %}
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light small text-uppercase text-muted">
+                <tr>
+                  <th>Ticket</th>
+                  <th>Title & Location</th>
+                  <th>Submitted At</th>
+                  <th>Parts Replaced</th>
+                  <th>Status</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for a in pending_verification_tasks %}
+                <tr>
+                  <td class="fw-bold font-monospace">{{ a.complaint.complaint_no }}</td>
+                  <td>
+                    <div class="fw-semibold">{{ a.complaint.title }}</div>
+                    <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ a.complaint.location_details }}</small>
+                  </td>
+                  <td class="small text-muted">
+                    {{ a.complaint.submitted_for_verification_at.strftime('%d %b, %H:%M') if a.complaint.submitted_for_verification_at else 'Submitted' }}
+                  </td>
+                  <td class="small text-muted">
+                    {{ a.complaint.latest_evidence.parts_replaced if a.complaint.latest_evidence else 'N/A' }}
+                  </td>
+                  <td>
+                    <span class="badge bg-warning text-dark">Awaiting Resident Approval</span>
+                  </td>
+                  <td class="text-end">
+                    <a href="{{ url_for('worker.task_detail', task_id=a.id) }}" class="btn btn-sm btn-outline-secondary">
+                      View Submission
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox text-secondary fs-1"></i>
+            <h6 class="mt-2 text-secondary">No repairs currently awaiting resident verification.</h6>
+          </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

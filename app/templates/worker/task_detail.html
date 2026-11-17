@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Task {{ complaint.complaint_no }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+  <div class="col-lg-10">
+
+    <!-- Header Navigation -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+      <div>
+        <a href="{{ url_for('worker.dashboard') }}" class="text-decoration-none small text-muted mb-1 d-inline-block">
+          &larr; Back to Worker Dashboard
+        </a>
+        <div class="d-flex align-items-center gap-2">
+          <h3 class="fw-bold mb-0 font-monospace">{{ complaint.complaint_no }}</h3>
+          <span class="badge 
+            {% if complaint.status == 'Assigned' %}bg-info text-dark
+            {% elif complaint.status == 'In Progress' %}bg-primary
+            {% elif complaint.status == 'Pending Verification' %}bg-warning text-dark
+            {% elif complaint.status == 'Rework Required' %}bg-danger
+            {% elif complaint.status == 'Closed' %}bg-success
+            {% else %}bg-secondary{% endif %} fs-6">
+            {{ complaint.status }}
+          </span>
+          <span class="badge badge-priority-{{ complaint.effective_priority }} fs-6">
+            {{ complaint.effective_priority }} Priority
+          </span>
+        </div>
+      </div>
+      <div class="text-md-end small text-muted">
+        <div>Assigned: {{ assignment.assigned_at.strftime('%d %b %Y, %H:%M') }}</div>
+        {% if assignment.deadline %}
+          <div class="text-danger fw-semibold"><i class="bi bi-clock-fill"></i> Target Deadline: {{ assignment.deadline.strftime('%d %b %Y, %H:%M') }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- REWORK ALERT (If rejected by resident) -->
+    {% if complaint.status == 'Rework Required' %}
+    <div class="alert alert-danger shadow-sm border-danger mb-4">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="bi bi-exclamation-octagon-fill fs-5 text-danger"></i>
+        <strong class="text-danger">Resident Rejected Previous Repair Submission:</strong>
+      </div>
+      {% set last_update = complaint.status_updates.filter_by(new_status='Rework Required').order_by(complaint.status_updates.model.created_at.desc()).first() %}
+      <p class="mb-0 bg-white p-3 rounded border border-danger text-dark fw-semibold">
+        {{ last_update.comment if last_update else 'The resident requested corrective maintenance.' }}
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- ACTION CARD 1: ACCEPT TASK (If status is Assigned) -->
+    {% if assignment.status == 'Assigned' and complaint.status == 'Assigned' %}
+    <div class="card border-primary shadow-sm mb-4 bg-primary bg-opacity-10">
+      <div class="card-body p-4 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+        <div>
+          <h5 class="fw-bold text-primary mb-1"><i class="bi bi-check2-circle me-2"></i> Step 9: Accept Task & Begin Work</h5>
+          <span class="small text-muted">Acknowledge this maintenance assignment to notify the resident and manager that work is commencing.</span>
+        </div>
+        <form action="{{ url_for('worker.accept_task', task_id=assignment.id) }}" method="POST">
+          <button type="submit" class="btn btn-primary btn-lg px-4 fw-bold">
+            <i class="bi bi-play-circle-fill me-2"></i> Accept & Start Maintenance
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+      <!-- Left Column: Complaint & Asset Details -->
+      <div class="col-lg-6">
+        
+        <!-- Incident Info -->
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white py-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle text-primary me-2"></i> Ticket Scope & Details</h6>
+          </div>
+          <div class="card-body p-4">
+            <h5 class="fw-bold mb-3">{{ complaint.title }}</h5>
+
+            <div class="row g-3 mb-3">
+              <div class="col-sm-6">
+                <div class="text-muted small">Category</div>
+                <div class="fw-semibold">{{ complaint.category.name }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small">Exact Location</div>
+                <div class="fw-semibold text-danger"><i class="bi bi-geo-alt-fill"></i> {{ complaint.location_details }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small">Resident Contact</div>
+                <div class="fw-semibold">{{ complaint.resident.user.full_name }} (Flat {{ complaint.resident.flat_no }})</div>
+                <div class="small text-muted"><i class="bi bi-telephone"></i> {{ complaint.resident.user.phone or 'Not provided' }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="text-muted small">Manager Instructions</div>
+                <div class="small text-dark fst-italic">{{ assignment.notes or 'Standard procedure' }}</div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <div class="text-muted small fw-semibold">Problem Description:</div>
+              <p class="mt-1 text-dark bg-light p-3 rounded border small" style="white-space: pre-wrap;">{{ complaint.description }}</p>
+            </div>
+
+            {% if complaint.photo_url %}
+            <div class="mt-3">
+              <div class="text-muted small fw-semibold mb-2">Resident Photo:</div>
+              <img src="{{ url_for('static', filename=complaint.photo_url) }}" class="img-fluid rounded border shadow-sm" style="max-height: 250px;" alt="Issue photo">
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Asset Details (If linked) -->
+        {% if complaint.asset %}
+        <div class="card shadow-sm border-0 mb-4 border-start border-4 border-dark">
+          <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-boxes me-2"></i> Asset Registry Details</h6>
+            <a href="{{ url_for('asset.view_asset', asset_code=complaint.asset.asset_code) }}" class="btn btn-sm btn-outline-dark py-0" style="font-size: 11px;">
+              Full History &rarr;
+            </a>
+          </div>
+          <div class="card-body p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="badge bg-dark fs-6">{{ complaint.asset.asset_code }}</span>
+              <span class="badge bg-secondary">{{ complaint.asset.status }}</span>
+            </div>
+            <h6 class="fw-bold mb-1">{{ complaint.asset.name }}</h6>
+            <div class="small text-muted mb-2">{{ complaint.asset.category }} &bull; {{ complaint.asset.building }}</div>
+            <div class="row g-2 small">
+              <div class="col-6"><strong>Condition:</strong> {{ complaint.asset.condition }}</div>
+              <div class="col-6"><strong>Criticality:</strong> {{ complaint.asset.criticality }} / 5</div>
+              <div class="col-6"><strong>Last Maint:</strong> {{ complaint.asset.last_maintenance_date.strftime('%d %b %Y') if complaint.asset.last_maintenance_date else 'N/A' }}</div>
+              <div class="col-6"><strong>Next Due:</strong> {{ complaint.asset.next_maintenance_date.strftime('%d %b %Y') if complaint.asset.next_maintenance_date else 'N/A' }}</div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+
+      <!-- Right Column: Evidence Submission Form OR Past Evidence -->
+      <div class="col-lg-6">
+        
+        <!-- ACTION FORM: SUBMIT REPAIR EVIDENCE -->
+        {% if complaint.status in ['In Progress', 'Rework Required'] %}
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-success text-white py-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-camera-fill me-2"></i> Submit Repair Evidence (Steps 10-12)</h6>
+          </div>
+          <div class="card-body p-4">
+            <p class="small text-muted mb-3">
+              To submit this ticket for resident verification, provide inspection notes, repair description, and completion photographic evidence:
+            </p>
+
+            <form action="{{ url_for('worker.submit_evidence', task_id=assignment.id) }}" method="POST" enctype="multipart/form-data">
+              
+              <!-- Repair Description -->
+              <div class="mb-3">
+                <label for="repair_description" class="form-label fw-semibold">Repair Action Performed *</label>
+                <textarea class="form-control" id="repair_description" name="repair_description" rows="3" 
+                  placeholder="Detail the root cause identified and repairs executed (e.g., Replaced blown capacitor, recalibrated elevator leveling sensor, tested emergency brake)" required></textarea>
+              </div>
+
+              <!-- Inspection Notes -->
+              <div class="mb-3">
+                <label for="inspection_notes" class="form-label fw-semibold">Inspection Notes</label>
+                <textarea class="form-control" id="inspection_notes" name="inspection_notes" rows="2" 
+                  placeholder="General condition of equipment, observations, recommendations for future preventive overhaul"></textarea>
+              </div>
+
+              <!-- Parts Replaced -->
+              <div class="row g-3 mb-3">
+                <div class="col-md-7">
+                  <label for="parts_replaced" class="form-label fw-semibold">Parts / Materials Used</label>
+                  <input type="text" class="form-control" id="parts_replaced" name="parts_replaced" placeholder="e.g. 15A Relay, PTFE Seal, 2m Wire">
+                </div>
+                <div class="col-md-5">
+                  <label for="time_spent_minutes" class="form-label fw-semibold">Time Spent (Mins)</label>
+                  <input type="number" class="form-control" id="time_spent_minutes" name="time_spent_minutes" value="45" min="5" step="5" required>
+                </div>
+              </div>
+
+              <!-- Evidence Photos -->
+              <div class="mb-3">
+                <label for="before_photo" class="form-label fw-semibold">Before-Repair Photo (Optional)</label>
+                <input class="form-control form-control-sm" type="file" id="before_photo" name="before_photo" accept="image/*">
+                <div class="form-text">Photograph before commencing repairs showing the defect.</div>
+              </div>
+
+              <div class="mb-4">
+                <label for="after_photo" class="form-label fw-semibold text-success">After-Repair Completion Photo (Mandatory Evidence) *</label>
+                <input class="form-control form-control-sm" type="file" id="after_photo" name="after_photo" accept="image/*" required>
+                <div class="form-text">Photograph after completion proving work was resolved cleanly.</div>
+              </div>
+
+              <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">
+                <i class="bi bi-shield-check me-2"></i> Submit for Resident Verification
+              </button>
+            </form>
+          </div>
+        </div>
+        {% elif complaint.status == 'Pending Verification' %}
+        <div class="card shadow-sm border-0 mb-4 bg-warning bg-opacity-10 border-warning">
+          <div class="card-body p-4 text-center">
+            <i class="bi bi-hourglass-split text-warning" style="font-size: 40px;"></i>
+            <h5 class="fw-bold mt-2">Awaiting Resident Verification</h5>
+            <p class="small text-muted mb-0">You have submitted repair completion evidence. The resident has been notified to inspect and approve or reject the work.</p>
+          </div>
+        </div>
+        {% elif complaint.status == 'Closed' %}
+        <div class="card shadow-sm border-0 mb-4 bg-success bg-opacity-10 border-success">
+          <div class="card-body p-4 text-center">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 40px;"></i>
+            <h5 class="fw-bold mt-2 text-success">Task Verified & Closed!</h5>
+            <p class="small text-muted mb-0">The resident approved this maintenance ticket. Service record saved to asset history.</p>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Previously Submitted Evidence Cards (If any) -->
+        {% if complaint.repair_evidences.count() > 0 %}
+        <div class="card shadow-sm border-0 mb-4">
+          <div class="card-header bg-white py-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-images text-primary me-2"></i> Recorded Repair Submissions ({{ complaint.repair_evidences.count() }})</h6>
+          </div>
+          <div class="card-body p-3">
+            {% for ev in complaint.repair_evidences %}
+              <div class="p-3 mb-3 border rounded bg-light">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small fw-bold">Submitted by {{ ev.worker.user.full_name }}</span>
+                  <small class="text-muted">{{ ev.submitted_at.strftime('%d %b, %H:%M') }}</small>
+                </div>
+                <div class="small text-dark mb-2"><strong>Repair:</strong> {{ ev.repair_description }}</div>
+                <div class="row g-2">
+                  {% if ev.before_photo_url %}
+                  <div class="col-6">
+                    <div class="small text-muted mb-1">Before:</div>
+                    <img src="{{ url_for('static', filename=ev.before_photo_url) }}" class="img-fluid rounded border" style="height: 120px; object-fit: cover;">
+                  </div>
+                  {% endif %}
+                  <div class="{% if ev.before_photo_url %}col-6{% else %}col-12{% endif %}">
+                    <div class="small text-muted mb-1">After (Resolved):</div>
+                    <img src="{{ url_for('static', filename=ev.after_photo_url) }}" class="img-fluid rounded border" style="height: 120px; object-fit: cover;">
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

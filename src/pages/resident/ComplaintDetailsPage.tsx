@@ -287,11 +287,6 @@ export const ComplaintDetailsPage: React.FC = () => {
                 {complaint.category}
               </span>
               <PriorityBadge priority={complaint.priority} />
-              {complaint.source && (complaint.source === 'WhatsApp' || complaint.source === 'Mock WhatsApp') && (
-                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded">
-                  WhatsApp
-                </span>
-              )}
             </div>
             <h1 className="text-lg sm:text-xl font-black text-slate-900">{complaint.title}</h1>
           </div>

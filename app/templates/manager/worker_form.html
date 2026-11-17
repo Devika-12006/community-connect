@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Add Maintenance Worker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-3">
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white py-3">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-person-plus text-primary me-2"></i> Add Maintenance Staff Member</h5>
+        <span class="small text-muted">Create a worker account with specialized maintenance trade role</span>
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('manager.add_worker') }}">
+          <div class="row g-3 mb-3">
+            <div class="col-md-12">
+              <label for="full_name" class="form-label fw-semibold">Worker Full Name *</label>
+              <input type="text" class="form-control" id="full_name" name="full_name" placeholder="e.g. Ramesh Kumar" required>
+            </div>
+
+            <div class="col-md-6">
+              <label for="username" class="form-label fw-semibold">Portal Username *</label>
+              <input type="text" class="form-control" id="username" name="username" placeholder="e.g. worker_plumber" required>
+            </div>
+
+            <div class="col-md-6">
+              <label for="email" class="form-label fw-semibold">Email Address *</label>
+              <input type="email" class="form-control" id="email" name="email" placeholder="worker@community.com" required>
+            </div>
+
+            <div class="col-md-6">
+              <label for="specialty" class="form-label fw-semibold">Primary Specialty / Trade *</label>
+              <select class="form-select" id="specialty" name="specialty" required>
+                <option value="">Select Specialty...</option>
+                <option value="Plumbing & Water Systems">Plumbing & Water Systems</option>
+                <option value="Electrical & Power">Electrical & Power</option>
+                <option value="Elevator & Lift Engineering">Elevator & Lift Engineering</option>
+                <option value="Civil & Carpentry">Civil & Carpentry</option>
+                <option value="HVAC & Fire Safety">HVAC & Fire Safety</option>
+                <option value="General Handyman">General Handyman</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label for="phone" class="form-label fw-semibold">Contact Phone / Emergency</label>
+              <input type="tel" class="form-control" id="phone" name="phone" placeholder="+91 98765 43210">
+            </div>
+
+            <div class="col-md-12">
+              <label for="password" class="form-label fw-semibold">Initial Password *</label>
+              <input type="password" class="form-control" id="password" name="password" minlength="6" required>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="{{ url_for('manager.workers') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary fw-bold px-4">
+              <i class="bi bi-person-check-fill me-1"></i> Register Worker Profile
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

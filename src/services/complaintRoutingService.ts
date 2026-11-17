@@ -17,7 +17,7 @@ export interface RouteComplaintResult {
 
 export const complaintRoutingService = {
   /**
-   * Process an incoming message from WhatsApp or Simulator
+   * Process an incoming message from Inbound AI, Webhook, or Direct entry
    */
   async processIncomingMessage(input: {
     messageText: string;
@@ -25,11 +25,11 @@ export const complaintRoutingService = {
     reporterName?: string;
     organizationId?: string;
     externalMessageId?: string;
-    source?: 'WhatsApp' | 'Mock WhatsApp' | 'Web' | 'Other';
+    source?: 'Inbound AI' | 'Webhook' | 'Web' | 'Other';
   }): Promise<RouteComplaintResult> {
     const config = await repository.getIntegrationConfig();
     const organizationId = input.organizationId || config.defaultOrganizationId || 'org-rwa-1';
-    const source = input.source || 'WhatsApp';
+    const source = input.source || 'Inbound AI';
     const now = new Date().toISOString();
 
     // 1. AI Complaint Understanding
@@ -66,8 +66,8 @@ export const complaintRoutingService = {
     const complaint: Complaint = {
       id: complaintId,
       reference,
-      residentId: 'whatsapp-reporter',
-      residentName: input.reporterName || 'WhatsApp Resident',
+      residentId: 'inbound-reporter',
+      residentName: input.reporterName || 'Resident Report',
       residentBlock: analysis.location || 'General',
       block: analysis.location || 'General',
       specificLocation: analysis.location || 'Unspecified Location',
@@ -157,7 +157,7 @@ export const complaintRoutingService = {
       id: crypto.randomUUID(),
       recipientRole: 'Manager',
       recipientId: 'ALL',
-      title: `New WhatsApp Complaint: ${complaint.reference}`,
+      title: `New Inbound Complaint: ${complaint.reference}`,
       message: `${complaint.title} (${complaint.category}) at ${complaint.specificLocation || complaint.block}. ${
         matchResult.recommendedContact
           ? `Recommended contact: ${matchResult.recommendedContact.name} (${matchResult.matchScore}% confidence).`
@@ -173,7 +173,7 @@ export const complaintRoutingService = {
       id: crypto.randomUUID(),
       organizationId,
       actorId: 'ai-agent',
-      actorName: 'WhatsApp AI Agent',
+      actorName: 'Inbound AI Agent',
       action: 'ROUTED_COMPLAINT',
       recordType: 'COMPLAINT',
       recordId: complaint.id,
@@ -189,7 +189,7 @@ export const complaintRoutingService = {
     };
     await repository.addAuditLog(auditEntry);
 
-    // 8. Generate WhatsApp Response
+    // 8. Generate Inbound Response Message
     let replyText = '';
     if (analysis.needsClarification && analysis.clarificationQuestion) {
       replyText = `Hello! We received your report regarding "${analysis.category}". We've opened ticket *#${complaint.reference}*.\n\n${analysis.clarificationQuestion}\n\nYou can reply directly to this message with the details!`;

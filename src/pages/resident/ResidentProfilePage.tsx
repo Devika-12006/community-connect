@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { validateResidentName, validateFlatNumber } from '../../lib/validationUtils';
 import {
   Building,
   Plus,
@@ -24,21 +25,46 @@ export const ResidentProfilePage: React.FC = () => {
   const [name, setName] = useState('');
   const [block, setBlock] = useState(settings.blocks[0] || 'Block A');
   const [flat, setFlat] = useState('');
+  const [residentType, setResidentType] = useState<'Owner' | 'Tenant' | 'Family Member'>('Owner');
   const [formError, setFormError] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setFormError('Please enter a display name.');
-      return;
-    }
-    if (!flat.trim()) {
-      setFormError('Please enter a flat or house number.');
+    setFormError('');
+
+    // Validate full name
+    const nameCheck = validateResidentName(name);
+    if (!nameCheck.valid) {
+      setFormError(nameCheck.error || 'Please enter a valid resident name.');
       return;
     }
 
+    // Validate flat identifier
+    const flatCheck = validateFlatNumber(flat);
+    if (!flatCheck.valid) {
+      setFormError(flatCheck.error || 'Please enter a valid flat number.');
+      return;
+    }
+
+    // Check duplicate owner registration for this exact unit
+    if (residentType === 'Owner') {
+      const existingOwner = residents.find(
+        (r) =>
+          r.active &&
+          r.block.trim().toLowerCase() === block.trim().toLowerCase() &&
+          r.flatNumber.trim().toLowerCase() === flatCheck.cleanValue!.toLowerCase() &&
+          r.residentType === 'Owner'
+      );
+      if (existingOwner) {
+        setFormError(
+          `An Owner is already registered for ${block}, Flat ${flatCheck.cleanValue}. Please select "Tenant" or "Family Member".`
+        );
+        return;
+      }
+    }
+
     try {
-      const created = await createResident(name.trim(), block, flat.trim());
+      const created = await createResident(nameCheck.cleanValue!, block, flatCheck.cleanValue!, residentType);
       setName('');
       setFlat('');
       setShowAddForm(false);
@@ -80,6 +106,11 @@ export const ResidentProfilePage: React.FC = () => {
                 <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
                   <Building className="w-3.5 h-3.5 text-slate-400" />
                   <span>{activeResident.block} • Flat {activeResident.flatNumber}</span>
+                  {activeResident.residentType && (
+                    <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                      {activeResident.residentType}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -140,7 +171,7 @@ export const ResidentProfilePage: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Building or Block</label>
                 <select
@@ -155,14 +186,27 @@ export const ResidentProfilePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Flat / House #</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Flat / Unit Details</label>
                 <input
                   type="text"
                   value={flat}
                   onChange={(e) => setFlat(e.target.value)}
-                  placeholder="e.g. 501"
+                  placeholder="e.g. 501 or Tower A - 402"
                   className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none bg-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Resident Role</label>
+                <select
+                  value={residentType}
+                  onChange={(e) => setResidentType(e.target.value as any)}
+                  className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none bg-white"
+                >
+                  <option value="Owner">Owner</option>
+                  <option value="Tenant">Tenant</option>
+                  <option value="Family Member">Family Member</option>
+                </select>
               </div>
             </div>
 
@@ -211,8 +255,13 @@ export const ResidentProfilePage: React.FC = () => {
                     </div>
                     <div>
                       <div className="text-xs font-bold text-slate-900">{r.displayName}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {r.block} • Flat {r.flatNumber}
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                        <span>{r.block} • Flat {r.flatNumber}</span>
+                        {r.residentType && (
+                          <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium text-[9px]">
+                            {r.residentType}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -1,0 +1,198 @@
+:root {
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --secondary-color: #475569;
+  --dark-surface: #0f172a;
+  --light-bg: #f8fafc;
+  --card-border: #e2e8f0;
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--light-bg);
+  color: var(--text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+}
+
+/* Navbar */
+.navbar-custom {
+  background-color: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff !important;
+}
+
+.nav-link {
+  font-weight: 500;
+  color: #cbd5e1 !important;
+  transition: color 0.15s ease-in-out;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: #ffffff !important;
+}
+
+/* Cards */
+.card {
+  border: 1px solid var(--card-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card {
+  border-left: 4px solid var(--primary-color);
+}
+
+.stat-card.critical {
+  border-left-color: #dc2626;
+}
+
+.stat-card.warning {
+  border-left-color: #f59e0b;
+}
+
+.stat-card.success {
+  border-left-color: #10b981;
+}
+
+/* Priority Badges */
+.badge-priority-Critical {
+  background-color: #dc2626;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-priority-High {
+  background-color: #ea580c;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-priority-Medium {
+  background-color: #0284c7;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.badge-priority-Low {
+  background-color: #64748b;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Status Badges */
+.badge-status-Submitted {
+  background-color: #e2e8f0;
+  color: #334155;
+}
+
+.badge-status-Assigned {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.badge-status-InProgress {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.badge-status-PendingVerification {
+  background-color: #fae8ff;
+  color: #86198f;
+}
+
+.badge-status-ReworkRequired {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-status-Closed {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+/* Timeline */
+.timeline {
+  position: relative;
+  padding-left: 2rem;
+  list-style: none;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.75rem;
+  width: 2px;
+  background-color: #e2e8f0;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  top: 0.25rem;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px #cbd5e1;
+}
+
+.timeline-item.active::before {
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px #a7f3d0;
+}
+
+.timeline-item.danger::before {
+  background-color: #dc2626;
+  box-shadow: 0 0 0 2px #fecaca;
+}
+
+/* Photo previews */
+.evidence-photo {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.qr-code-box {
+  background-color: #ffffff;
+  padding: 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.5rem;
+  display: inline-block;
+}
+
+/* Star rating widget */
+.rating-stars {
+  color: #f59e0b;
+  font-size: 1.25rem;
+}

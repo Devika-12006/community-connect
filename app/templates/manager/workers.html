@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Worker Performance & Accountability{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-3">
+  <div class="col-md-7">
+    <h3 class="fw-bold mb-1"><i class="bi bi-people-fill text-primary me-2"></i> Worker Accountability & Performance</h3>
+    <p class="text-muted small mb-0">Transparent metrics calculated strictly from actual timestamps and resident verification feedback</p>
+  </div>
+  <div class="col-md-5 text-md-end mt-2 mt-md-0">
+    <a href="{{ url_for('manager.add_worker') }}" class="btn btn-primary btn-sm">
+      <i class="bi bi-person-plus-fill me-1"></i> Add Maintenance Worker
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light text-muted small text-uppercase">
+        <tr>
+          <th>Worker Name</th>
+          <th>Specialty</th>
+          <th>Assigned</th>
+          <th>Completed</th>
+          <th>Active</th>
+          <th>Rework Count</th>
+          <th>On-Time Rate</th>
+          <th>Avg Resolution</th>
+          <th>Resident Rating</th>
+          <th>Availability</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if metrics %}
+          {% for m in metrics %}
+          <tr>
+            <td>
+              <div class="fw-bold text-dark">{{ m.name }}</div>
+              <small class="text-muted">{{ m.worker.user.email }}</small>
+            </td>
+            <td>
+              <span class="badge bg-light text-dark border">{{ m.specialty }}</span>
+            </td>
+            <td class="fw-semibold">{{ m.assigned_count }}</td>
+            <td class="text-success fw-bold">{{ m.completed_count }}</td>
+            <td>
+              {% if m.active_count > 0 %}
+                <span class="badge bg-primary">{{ m.active_count }} active</span>
+              {% else %}
+                <span class="badge bg-light text-muted border">0</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if m.rework_count > 0 %}
+                <span class="badge bg-danger">{{ m.rework_count }} rework</span>
+              {% else %}
+                <span class="badge bg-success">0</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                  <div class="progress-bar {% if m.on_time_rate >= 80 %}bg-success{% elif m.on_time_rate >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                    style="width: {{ m.on_time_rate }}%;"></div>
+                </div>
+                <small class="fw-bold">{{ m.on_time_rate }}%</small>
+              </div>
+            </td>
+            <td class="small text-muted">
+              {{ m.avg_resolution_hours }} hrs
+            </td>
+            <td>
+              {% if m.feedback_count > 0 %}
+                <span class="text-warning fw-bold">&#9733; {{ m.avg_rating }}</span>
+                <small class="text-muted" style="font-size: 11px;">({{ m.feedback_count }})</small>
+              {% else %}
+                <small class="text-muted">No reviews</small>
+              {% endif %}
+            </td>
+            <td>
+              {% if m.worker.is_available %}
+                <span class="badge bg-success">Available</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Busy</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" class="text-center py-5 text-muted">
+              <i class="bi bi-people fs-1"></i>
+              <h6 class="mt-2 text-secondary">No workers registered in the community.</h6>
+              <a href="{{ url_for('manager.add_worker') }}" class="btn btn-sm btn-primary mt-2">Add First Worker</a>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

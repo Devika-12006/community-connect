@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { repository } from '../../db/repository';
-import { whatsappService } from '../../services/whatsappService';
 import type { WhatsAppIntegrationConfig, Organization } from '../../types';
 import {
   Sliders,
   Save,
-  Phone,
+  Globe,
   Bot,
   Copy,
   Check,
   ShieldCheck,
   Sparkles,
   Zap,
+  AlertCircle,
 } from 'lucide-react';
 
 export const IntegrationSettingsPage: React.FC = () => {
@@ -19,8 +19,6 @@ export const IntegrationSettingsPage: React.FC = () => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -64,36 +62,10 @@ export const IntegrationSettingsPage: React.FC = () => {
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
-  const handleTestWhatsApp = async () => {
-    if (!config) return;
-    setIsTesting(true);
-    setTestResult(null);
-
-    try {
-      const res = await whatsappService.sendWhatsAppMessage(
-        '+919876543210',
-        'Test message from Community Connect WhatsApp Integration.',
-        config
-      );
-      if (res.success) {
-        setTestResult({ success: true, message: 'Message sent successfully via Meta Cloud API!' });
-      } else {
-        setTestResult({
-          success: false,
-          message: res.error || 'Failed to dispatch Meta Cloud API message. Simulator mode is active.',
-        });
-      }
-    } catch (err: any) {
-      setTestResult({ success: false, message: err.message || 'Connection test failed.' });
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
   if (!config) return null;
 
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-  const webhookUrl = `${currentOrigin}/api/whatsapp/webhook`;
+  const webhookUrl = `${currentOrigin}/api/webhooks/incoming`;
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -102,12 +74,12 @@ export const IntegrationSettingsPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 flex items-center gap-1">
-              <Sliders className="w-3.5 h-3.5" /> AI & WhatsApp Settings
+              <Sliders className="w-3.5 h-3.5" /> AI & System Integrations
             </span>
           </div>
           <h1 className="text-xl font-bold text-slate-800">Integration Configuration</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Configure Meta Cloud API credentials, AI intelligence providers, and automatic dispatch thresholds.
+            Configure AI intelligence providers, automatic dispatch thresholds, and external webhook listeners.
           </p>
         </div>
 
@@ -119,6 +91,14 @@ export const IntegrationSettingsPage: React.FC = () => {
           <Save className="w-4 h-4" />
           <span>Save Changes</span>
         </button>
+      </div>
+
+      {/* Feature Limitation Notice */}
+      <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-bold">Service Limitations:</span> Cloud AI providers require a valid API key and internet connectivity. When running offline or without external keys, the built-in rule-based engine operates locally with full zero-config fallback.
+        </div>
       </div>
 
       {saveSuccess && (
@@ -310,17 +290,17 @@ export const IntegrationSettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 3: WhatsApp Cloud API Settings */}
+        {/* Section 3: Inbound Webhook Listener Configuration */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-green-100 text-green-800 flex items-center justify-center font-bold">
-                <Phone className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                <Globe className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-800">Meta WhatsApp Business Cloud API</h2>
+                <h2 className="text-sm font-bold text-slate-800">Inbound System Webhook Listener</h2>
                 <p className="text-xs text-slate-500">
-                  Official WhatsApp Cloud API credentials for production phone numbers.
+                  Secure webhook endpoint to ingest external complaints and sensor events.
                 </p>
               </div>
             </div>
@@ -332,15 +312,14 @@ export const IntegrationSettingsPage: React.FC = () => {
                 onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
                 className="rounded text-teal-600"
               />
-              <span>Enable Real WhatsApp API</span>
+              <span>Enable Webhook Ingestion</span>
             </label>
           </div>
 
           <div className="space-y-3 text-xs">
-            {/* Webhook endpoint URL display */}
             <div>
               <label className="block text-slate-700 font-medium mb-1">
-                Your Meta Cloud API Webhook URL (Callback URL)
+                Webhook Endpoint URL
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -359,12 +338,12 @@ export const IntegrationSettingsPage: React.FC = () => {
                 </button>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Configure this URL in your Meta App Dashboard under WhatsApp &rarr; Configuration &rarr; Webhook.
+                External services can post JSON payloads to this endpoint with secret token authentication.
               </p>
             </div>
 
             <div>
-              <label className="block text-slate-700 font-medium mb-1">Webhook Verify Token</label>
+              <label className="block text-slate-700 font-medium mb-1">Webhook Security Verification Token</label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -383,62 +362,7 @@ export const IntegrationSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-700 font-medium mb-1">Phone Number ID</label>
-                <input
-                  type="text"
-                  value={config.phoneNumberId || ''}
-                  onChange={(e) => setConfig({ ...config, phoneNumberId: e.target.value })}
-                  placeholder="e.g. 109876543210987"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-[11px] focus:outline-teal-600 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-medium mb-1">WhatsApp Business Account ID</label>
-                <input
-                  type="text"
-                  value={config.businessAccountId || ''}
-                  onChange={(e) => setConfig({ ...config, businessAccountId: e.target.value })}
-                  placeholder="e.g. 209876543210987"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-[11px] focus:outline-teal-600 focus:bg-white"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">Permanent Meta Access Token</label>
-              <input
-                type="password"
-                value={config.accessToken || ''}
-                onChange={(e) => setConfig({ ...config, accessToken: e.target.value })}
-                placeholder="EAA..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-[11px] focus:outline-teal-600 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-700 font-medium mb-1">Meta App Secret (for HMAC verification)</label>
-              <input
-                type="password"
-                value={config.appSecret || ''}
-                onChange={(e) => setConfig({ ...config, appSecret: e.target.value })}
-                placeholder="e.g. 98a7b6c5d4e3..."
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 font-mono text-[11px] focus:outline-teal-600 focus:bg-white"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-              <button
-                type="button"
-                disabled={isTesting}
-                onClick={handleTestWhatsApp}
-                className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <span>{isTesting ? 'Testing...' : 'Test WhatsApp Connection'}</span>
-              </button>
-
+            <div className="pt-2 flex items-center justify-end border-t border-slate-100">
               <button
                 type="submit"
                 className="px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs cursor-pointer shadow-xs"
@@ -446,19 +370,6 @@ export const IntegrationSettingsPage: React.FC = () => {
                 Save Settings
               </button>
             </div>
-
-            {testResult && (
-              <div
-                className={`p-3 rounded-lg text-xs ${
-                  testResult.success
-                    ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                    : 'bg-amber-50 text-amber-900 border border-amber-200'
-                }`}
-              >
-                <div className="font-bold">{testResult.success ? 'Success' : 'Notice'}</div>
-                <div className="text-[11px] mt-0.5">{testResult.message}</div>
-              </div>
-            )}
           </div>
         </div>
       </form>

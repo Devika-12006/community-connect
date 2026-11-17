@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}My Complaints{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+  <div class="col-lg-11">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+      <div>
+        <h3 class="fw-bold mb-1"><i class="bi bi-card-checklist text-primary me-2"></i> My Complaints Registry</h3>
+        <p class="text-muted small mb-0">Track all maintenance issues submitted from your apartment</p>
+      </div>
+      <a href="{{ url_for('resident.submit_complaint') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-1"></i> Report New Issue
+      </a>
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body p-2 d-flex flex-wrap gap-2">
+        <a href="{{ url_for('resident.my_complaints') }}" class="btn btn-sm {% if not status_filter %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+          All ({{ complaints|length if not status_filter else 'View' }})
+        </a>
+        <a href="{{ url_for('resident.my_complaints', status='In Progress') }}" class="btn btn-sm {% if status_filter == 'In Progress' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+          In Progress
+        </a>
+        <a href="{{ url_for('resident.my_complaints', status='Pending Verification') }}" class="btn btn-sm {% if status_filter == 'Pending Verification' %}btn-warning text-dark{% else %}btn-outline-warning text-dark{% endif %}">
+          <i class="bi bi-bell-fill text-danger me-1"></i> Pending Verification
+        </a>
+        <a href="{{ url_for('resident.my_complaints', status='Rework Required') }}" class="btn btn-sm {% if status_filter == 'Rework Required' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+          Rework Required
+        </a>
+        <a href="{{ url_for('resident.my_complaints', status='Closed') }}" class="btn btn-sm {% if status_filter == 'Closed' %}btn-success{% else %}btn-outline-success{% endif %}">
+          Closed
+        </a>
+      </div>
+    </div>
+
+    <!-- Complaints Table -->
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light text-muted small text-uppercase">
+            <tr>
+              <th>Ticket No</th>
+              <th>Category</th>
+              <th>Title & Location</th>
+              <th>Priority</th>
+              <th>Assigned Worker</th>
+              <th>Status</th>
+              <th>Submitted</th>
+              <th class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if complaints %}
+              {% for c in complaints %}
+              <tr>
+                <td>
+                  <span class="fw-bold font-monospace">{{ c.complaint_no }}</span>
+                  {% if c.is_duplicate %}
+                    <span class="badge bg-secondary ms-1" style="font-size: 10px;">Duplicate</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border">
+                    <i class="bi {{ c.category.icon or 'bi-tag' }} me-1"></i> {{ c.category.name }}
+                  </span>
+                </td>
+                <td>
+                  <div class="fw-semibold text-truncate" style="max-width: 280px;">{{ c.title }}</div>
+                  <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ c.location_details }}</small>
+                </td>
+                <td>
+                  <span class="badge badge-priority-{{ c.effective_priority }}">
+                    {{ c.effective_priority }}
+                  </span>
+                  <small class="text-muted ms-1">({{ c.priority_score }})</small>
+                </td>
+                <td>
+                  {% if c.active_worker %}
+                    <div class="small fw-semibold">{{ c.active_worker.user.full_name }}</div>
+                    <div class="small text-muted" style="font-size: 11px;">{{ c.active_worker.specialty }}</div>
+                  {% else %}
+                    <span class="badge bg-light text-muted border">Unassigned</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if c.status == 'Submitted' %}
+                    <span class="badge bg-secondary">Submitted</span>
+                  {% elif c.status == 'Assigned' %}
+                    <span class="badge bg-info text-dark">Assigned</span>
+                  {% elif c.status == 'In Progress' %}
+                    <span class="badge bg-primary">In Progress</span>
+                  {% elif c.status == 'Pending Verification' %}
+                    <span class="badge bg-warning text-dark animate-pulse">Pending Verification</span>
+                  {% elif c.status == 'Rework Required' %}
+                    <span class="badge bg-danger">Rework Required</span>
+                  {% elif c.status == 'Closed' %}
+                    <span class="badge bg-success">Closed</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ c.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="small text-muted">
+                  {{ c.created_at.strftime('%d %b %Y') }}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('resident.complaint_detail', complaint_id=c.id) }}" class="btn btn-sm btn-outline-primary">
+                    View &rarr;
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8" class="text-center py-5 text-muted">
+                  <i class="bi bi-inbox text-secondary" style="font-size: 40px;"></i>
+                  <h6 class="mt-2 text-secondary">No complaints match this filter.</h6>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

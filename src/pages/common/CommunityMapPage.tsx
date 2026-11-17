@@ -68,11 +68,19 @@ export const CommunityMapPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Privacy Notice Banner */}
-      <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-2xl flex items-start gap-2.5 text-xs text-teal-950">
-        <Shield className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-bold">Resident Privacy Guarantee:</span> Community map markers and summaries strictly omit personal identities, flat numbers, contact details, private photos, and internal manager notes.
+      {/* Privacy Notice and Limitation Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="p-3.5 bg-teal-50/70 border border-teal-200 rounded-2xl flex items-start gap-2.5 text-xs text-teal-950">
+          <Shield className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Resident Privacy Guarantee:</span> Community map markers and summaries strictly omit personal identities, flat numbers, contact details, private photos, and internal manager notes.
+          </div>
+        </div>
+        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-2.5 text-xs text-slate-700">
+          <Compass className="w-4 h-4 text-slate-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold">Map Marker Limitation:</span> Only complaints with verified device GPS coordinates are pinned on the spatial map. Issues submitted with manual building and landmark descriptions are cataloged in the directory below.
+          </div>
         </div>
       </div>
 

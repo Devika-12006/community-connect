@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Resident Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h3 class="fw-bold mb-1">Resident Dashboard</h3>
+    <p class="text-muted mb-0"><i class="bi bi-geo-alt me-1"></i> {{ resident.full_address }} &bull; Welcome, {{ current_user.full_name }}</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{{ url_for('asset.scan_qr') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-qr-code-scan me-1"></i> Scan Asset QR
+    </a>
+    <a href="{{ url_for('resident.submit_complaint') }}" class="btn btn-primary">
+      <i class="bi bi-plus-circle me-1"></i> Report Maintenance Issue
+    </a>
+  </div>
+</div>
+
+<!-- Pending Verification Alert Banner -->
+{% if pending_verification > 0 %}
+<div class="alert alert-warning border-warning shadow-sm d-flex justify-content-between align-items-center mb-4">
+  <div class="d-flex align-items-center">
+    <i class="bi bi-bell-fill fs-3 text-warning me-3"></i>
+    <div>
+      <h6 class="alert-heading fw-bold mb-0">Repairs Awaiting Your Verification</h6>
+      <p class="mb-0 small text-dark">You have <strong>{{ pending_verification }}</strong> completed maintenance job(s) requiring inspection and approval.</p>
+    </div>
+  </div>
+  <a href="{{ url_for('resident.my_complaints', status='Pending Verification') }}" class="btn btn-warning btn-sm fw-semibold">
+    Review Evidence & Sign Off <i class="bi bi-arrow-right"></i>
+  </a>
+</div>
+{% endif %}
+
+<!-- Resident Stat Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card p-3 bg-white">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <span class="text-muted small text-uppercase fw-semibold">Total Logged</span>
+          <h3 class="fw-bold mt-1 mb-0">{{ total }}</h3>
+        </div>
+        <div class="bg-primary-subtle text-primary p-3 rounded-circle"><i class="bi bi-journal-text fs-4"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card stat-card warning p-3 bg-white">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <span class="text-muted small text-uppercase fw-semibold">In Progress</span>
+          <h3 class="fw-bold mt-1 mb-0 text-warning">{{ active }}</h3>
+        </div>
+        <div class="bg-warning-subtle text-warning p-3 rounded-circle"><i class="bi bi-tools fs-4"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card stat-card p-3 bg-white" style="border-left-color: #86198f;">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <span class="text-muted small text-uppercase fw-semibold">Pending Approval</span>
+          <h3 class="fw-bold mt-1 mb-0 text-purple">{{ pending_verification }}</h3>
+        </div>
+        <div class="bg-light p-3 rounded-circle text-purple"><i class="bi bi-patch-check fs-4"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card stat-card success p-3 bg-white">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <span class="text-muted small text-uppercase fw-semibold">Closed & Rated</span>
+          <h3 class="fw-bold mt-1 mb-0 text-success">{{ resolved }}</h3>
+        </div>
+        <div class="bg-success-subtle text-success p-3 rounded-circle"><i class="bi bi-check-circle-fill fs-4"></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Resident Complaints Table -->
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>Recent Maintenance Complaints</h5>
+    <a href="{{ url_for('resident.my_complaints') }}" class="btn btn-outline-primary btn-sm">View All Tickets</a>
+  </div>
+  <div class="card-body p-0">
+    {% if complaints %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Ticket ID</th>
+              <th scope="col">Title & Location</th>
+              <th scope="col">Category</th>
+              <th scope="col">Asset</th>
+              <th scope="col">Priority</th>
+              <th scope="col">Status</th>
+              <th scope="col">Assigned Technician</th>
+              <th scope="col" class="text-end">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in complaints %}
+              <tr>
+                <td class="fw-semibold">
+                  <a href="{{ url_for('resident.complaint_detail', complaint_id=c.id) }}" class="text-decoration-none">
+                    #{{ c.complaint_no }}
+                  </a>
+                </td>
+                <td>
+                  <div class="fw-semibold text-dark">{{ c.title }}</div>
+                  <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ c.location_details }}</small>
+                </td>
+                <td><span class="badge bg-light text-dark border">{{ c.category.name }}</span></td>
+                <td>
+                  {% if c.asset %}
+                    <a href="{{ url_for('asset.view_asset', asset_code=c.asset.asset_code) }}" class="badge bg-info-subtle text-info-emphasis text-decoration-none">
+                      <i class="bi bi-qr-code"></i> {{ c.asset.name }}
+                    </a>
+                  {% else %}
+                    <span class="text-muted small">General Facility</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge badge-priority-{{ c.effective_priority }}">{{ c.effective_priority }}</span>
+                  <small class="text-muted d-block mt-1">Score: {{ c.priority_score }}</small>
+                </td>
+                <td>
+                  <span class="badge badge-status-{{ c.status|replace(' ', '') }}">{{ c.status }}</span>
+                </td>
+                <td>
+                  {% if c.active_worker %}
+                    <div class="small fw-semibold">{{ c.active_worker.user.full_name }}</div>
+                    <small class="text-muted">{{ c.active_worker.specialty }}</small>
+                  {% else %}
+                    <span class="text-muted small fst-italic">Awaiting Assignment</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <a href="{{ url_for('resident.complaint_detail', complaint_id=c.id) }}" class="btn btn-outline-secondary btn-sm">
+                    View <i class="bi bi-chevron-right"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-center py-5">
+        <i class="bi bi-inbox text-muted display-4 mb-2"></i>
+        <h5 class="fw-semibold text-muted">No Maintenance Complaints Logged</h5>
+        <p class="text-muted small">Your community is running smoothly! If you notice any fault, report it below.</p>
+        <a href="{{ url_for('resident.submit_complaint') }}" class="btn btn-primary mt-2">
+          <i class="bi bi-plus-circle me-1"></i> Report an Issue
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Register Community Asset{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-3">
+  <div class="col-lg-8">
+    <div class="card p-4 shadow-sm border-0">
+      <div class="border-bottom pb-3 mb-4">
+        <h4 class="fw-bold mb-1">Register New Community Asset</h4>
+        <p class="text-muted small mb-0">Generate scannable QR tags and configure criticality metrics for automated maintenance triage</p>
+      </div>
+
+      <form method="POST" action="{{ url_for('manager.add_asset') }}">
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label for="asset_code" class="form-label fw-semibold">Unique Asset Code <span class="text-danger">*</span></label>
+            <input type="text" class="form-control font-monospace" id="asset_code" name="asset_code" required 
+                   placeholder="e.g. AST-ELEV-03, AST-PUMP-02" style="text-transform: uppercase;">
+            <div class="form-text small">Used for barcode/QR encoding and physical tagging.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label for="name" class="form-label fw-semibold">Asset Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="name" name="name" required 
+                   placeholder="e.g. Block A Passenger Lift 1">
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label for="category" class="form-label fw-semibold">Asset Category <span class="text-danger">*</span></label>
+            <select class="form-select" id="category" name="category" required>
+              <option value="" disabled selected>Select category</option>
+              <option value="Elevators">Elevators & Lifts</option>
+              <option value="Water pumps">Water Pumps & Hydro Systems</option>
+              <option value="Generators">Backup Power & Generators</option>
+              <option value="Streetlights">Streetlights & Perimeter Lighting</option>
+              <option value="CCTV cameras">CCTV & Surveillance Infrastructure</option>
+              <option value="Fire safety equipment">Fire Safety & Hydrant System</option>
+              <option value="Water tanks">Overhead & Underground Water Tanks</option>
+              <option value="Drainage systems">Drainage & Sewage Network</option>
+              <option value="Parking infrastructure">Parking Infrastructure & Boom Barriers</option>
+              <option value="Common-area electrical">Common-Area Electrical & Transformers</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <label for="building" class="form-label fw-semibold">Building / Zone <span class="text-danger">*</span></label>
+            <select class="form-select" id="building" name="building" required>
+              <option value="" disabled selected>Select building</option>
+              <option value="Block A">Block A</option>
+              <option value="Block B">Block B</option>
+              <option value="Block C">Block C</option>
+              <option value="Block D">Block D</option>
+              <option value="Clubhouse">Clubhouse & Amenities</option>
+              <option value="Perimeter / Grounds">Perimeter & Common Grounds</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="location" class="form-label fw-semibold">Exact Placement / Room <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="location" name="location" required 
+                 placeholder="e.g. Ground floor main shaft, Basement pump room 2">
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label for="criticality" class="form-label fw-semibold">Asset Criticality (A) <span class="text-danger">*</span></label>
+            <select class="form-select" id="criticality" name="criticality" required>
+              <option value="5">5 - Life Safety / Extreme Critical (Lifts, Fire, Main Pump)</option>
+              <option value="4">4 - High Criticality (Generators, Transformers)</option>
+              <option value="3" selected>3 - Moderate (CCTV, Drainage)</option>
+              <option value="2">2 - Low Criticality (Streetlights)</option>
+              <option value="1">1 - Minimal / Cosmetic (Sprinklers, Benches)</option>
+            </select>
+            <div class="form-text small">Weight in formula: 5A</div>
+          </div>
+
+          <div class="col-md-4">
+            <label for="condition" class="form-label fw-semibold">Current Condition</label>
+            <select class="form-select" id="condition" name="condition">
+              <option value="Excellent">Excellent</option>
+              <option value="Good" selected>Good</option>
+              <option value="Fair">Fair</option>
+              <option value="Poor">Poor</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <label for="frequency" class="form-label fw-semibold">Maint. Frequency (Days)</label>
+            <input type="number" class="form-control" id="frequency" name="maintenance_frequency_days" value="30" min="7" max="365">
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label for="notes" class="form-label fw-semibold">Operational Notes / OEM Manual Reference</label>
+          <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Vendor service contract, warranty period, emergency shutdown instructions..."></textarea>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center">
+          <a href="{{ url_for('manager.assets') }}" class="btn btn-outline-secondary">Cancel</a>
+          <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold">
+            <i class="bi bi-qr-code me-1"></i> Register Asset & Generate QR Code
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

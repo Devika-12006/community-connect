@@ -17,8 +17,8 @@ import { reverseGeocodeCoordinates } from '../../lib/reverseGeocode';
 
 export interface LiveCaptureResult {
   rawBlob: Blob;
-  stampedBlob: Blob;
-  geoData: GeoLocationData;
+  stampedBlob?: Blob;
+  geoData?: GeoLocationData;
   previewUrl: string;
 }
 
@@ -249,9 +249,9 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   };
 
-  // Capture frame from active stream
+  // Capture frame from active stream (GPS is completely optional)
   const handleCaptureFrame = () => {
-    if (!videoRef.current || !isVideoReady || !locationData) return;
+    if (!videoRef.current || !isVideoReady) return;
 
     const video = videoRef.current;
     const canvas = document.createElement('canvas');
@@ -288,40 +288,50 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
 
   // Confirm photo: stamp photo and pass result back
   const handleAcceptPhoto = async () => {
-    if (!capturedRawBlob || !locationData) return;
+    if (!capturedRawBlob) return;
 
     setIsProcessingStamp(true);
 
     try {
-      // 1. Try reverse geocoding address
-      let resolvedAddress: string | null = null;
-      try {
-        resolvedAddress = await reverseGeocodeCoordinates(
-          locationData.latitude,
-          locationData.longitude
-        );
-      } catch {
-        resolvedAddress = null;
+      if (locationData) {
+        // 1. Try reverse geocoding address
+        let resolvedAddress: string | null = null;
+        try {
+          resolvedAddress = await reverseGeocodeCoordinates(
+            locationData.latitude,
+            locationData.longitude
+          );
+        } catch {
+          resolvedAddress = null;
+        }
+
+        const finalGeoData: GeoLocationData = {
+          ...locationData,
+          address: resolvedAddress || undefined,
+        };
+
+        // 2. Generate stamped copy
+        const stampedBlob = await generateStampedPhoto(capturedRawBlob, finalGeoData, {
+          communityName,
+        });
+
+        const previewUrl = URL.createObjectURL(stampedBlob);
+
+        onPhotoCaptured({
+          rawBlob: capturedRawBlob,
+          stampedBlob,
+          geoData: finalGeoData,
+          previewUrl,
+        });
+      } else {
+        // GPS not present or skipped: proceed with raw blob
+        const previewUrl = URL.createObjectURL(capturedRawBlob);
+        onPhotoCaptured({
+          rawBlob: capturedRawBlob,
+          stampedBlob: capturedRawBlob,
+          previewUrl,
+        });
       }
-
-      const finalGeoData: GeoLocationData = {
-        ...locationData,
-        address: resolvedAddress || undefined,
-      };
-
-      // 2. Generate stamped copy
-      const stampedBlob = await generateStampedPhoto(capturedRawBlob, finalGeoData, {
-        communityName,
-      });
-
-      const previewUrl = URL.createObjectURL(stampedBlob);
-
-      onPhotoCaptured({
-        rawBlob: capturedRawBlob,
-        stampedBlob,
-        geoData: finalGeoData,
-        previewUrl,
-      });
 
       handleModalClose();
     } catch (err) {
@@ -331,7 +341,7 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
       onPhotoCaptured({
         rawBlob: capturedRawBlob,
         stampedBlob: capturedRawBlob,
-        geoData: locationData,
+        geoData: locationData || undefined,
         previewUrl,
       });
       handleModalClose();
@@ -342,7 +352,7 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
 
   if (!isOpen) return null;
 
-  const canCapture = isVideoReady && locationStatus === 'ready' && locationData !== null;
+  const canCapture = isVideoReady;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs">
@@ -367,7 +377,7 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
         <div className="px-4 py-2 bg-teal-950/60 border-b border-teal-900/50 flex items-start gap-2 text-[11px] text-teal-200">
           <Shield className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" />
           <span>
-            <strong>Required Live Workflow:</strong> Your camera and location are used exclusively to record issue evidence at the actual scene. Gallery uploads, file picking, and past attachments are disabled.
+            <strong>Device Camera:</strong> Requires camera permission and compatible hardware. GPS acquisition is optional; manual location details can be specified in the report form.
           </span>
         </div>
 
@@ -524,15 +534,7 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
                 }`}
               >
                 <Camera className="w-4 h-4" />
-                <span>
-                  {!isVideoReady
-                    ? 'Preparing Camera...'
-                    : locationStatus === 'acquiring'
-                    ? 'Acquiring GPS Fix...'
-                    : !locationData
-                    ? 'GPS Location Required'
-                    : 'Capture Photo'}
-                </span>
+                <span>{!isVideoReady ? 'Connecting Camera...' : 'Capture Photo'}</span>
               </button>
 
               <div className="w-16" />

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Chronic Reliability & Recurring Issues Monitor{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-4">
+  <div class="col-md-8">
+    <h3 class="fw-bold mb-1"><i class="bi bi-exclamation-diamond-fill text-danger me-2"></i> Chronic Asset Reliability Monitor</h3>
+    <p class="text-muted small mb-0">Identifies equipment with high complaint density (&ge; 3 complaints in 30 days) to recommend root-cause overhauls</p>
+  </div>
+  <div class="col-md-4 text-md-end mt-2 mt-md-0">
+    <a href="{{ url_for('manager.assets') }}" class="btn btn-outline-dark btn-sm">
+      &larr; Asset Registry
+    </a>
+  </div>
+</div>
+
+{% if alerts %}
+  <div class="row g-4">
+    {% for a in alerts %}
+      <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100 border-start border-4 border-danger">
+          <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge bg-dark font-monospace me-2">{{ a.asset.asset_code }}</span>
+              <strong class="fs-6 text-dark">{{ a.asset.name }}</strong>
+            </div>
+            <span class="badge bg-danger fs-6">{{ a.risk_level }} Risk</span>
+          </div>
+          <div class="card-body p-4">
+            <div class="d-flex align-items-center gap-3 mb-3 p-3 bg-danger bg-opacity-10 rounded">
+              <i class="bi bi-exclamation-triangle-fill text-danger fs-1"></i>
+              <div>
+                <h5 class="fw-bold mb-0 text-danger">{{ a.complaint_count }} Incidents in {{ a.window_days }} Days</h5>
+                <span class="small text-dark">Location: {{ a.asset.building }} &bull; {{ a.asset.location }}</span>
+              </div>
+            </div>
+
+            <div class="row g-2 small mb-3">
+              <div class="col-6"><strong>Asset Criticality:</strong> {{ a.criticality }} / 5</div>
+              <div class="col-6"><strong>Current Condition:</strong> <span class="badge bg-secondary">{{ a.condition }}</span></div>
+              <div class="col-12 mt-2">
+                <strong>Recommended Action:</strong>
+                <div class="text-muted">{{ a.recommendation }}</div>
+              </div>
+            </div>
+
+            <h6 class="fw-bold text-dark small text-uppercase mb-2">Recent Incident Logs:</h6>
+            <div class="list-group list-group-flush border rounded small mb-3">
+              {% for c in a.complaints[:4] %}
+                <div class="list-group-item p-2 d-flex justify-content-between align-items-center">
+                  <div>
+                    <span class="fw-bold font-monospace text-primary">#{{ c.complaint_no }}</span>: {{ c.title }}
+                    <div class="text-muted" style="font-size: 11px;">{{ c.created_at.strftime('%d %b %Y') }} &bull; {{ c.status }}</div>
+                  </div>
+                  <a href="{{ url_for('manager.complaint_detail', complaint_id=c.id) }}" class="btn btn-sm btn-outline-secondary py-0">View</a>
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="d-flex gap-2">
+              <a href="{{ url_for('manager.asset_detail', asset_id=a.asset.id) }}" class="btn btn-sm btn-primary flex-grow-1">
+                <i class="bi bi-wrench me-1"></i> Schedule Preventive Overhaul
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card shadow-sm border-0 py-5 text-center">
+    <div class="card-body">
+      <i class="bi bi-shield-check text-success" style="font-size: 48px;"></i>
+      <h5 class="fw-bold mt-3 text-secondary">All Assets Within Normal Reliability Limits</h5>
+      <p class="text-muted small">No community equipment has crossed the chronic recurrence threshold (&ge; 3 complaints in 30 days).</p>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

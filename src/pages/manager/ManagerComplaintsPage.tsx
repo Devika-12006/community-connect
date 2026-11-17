@@ -52,6 +52,9 @@ export const ManagerComplaintsPage: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [workerFilter, setWorkerFilter] = useState<string>('ALL');
   const [suspiciousOnly, setSuspiciousOnly] = useState<boolean>(false);
+  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'priority_desc' | 'ref_asc'>('date_desc');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 10;
 
   // Selected complaint for review modal
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
@@ -309,27 +312,59 @@ export const ManagerComplaintsPage: React.FC = () => {
   }, [selectedComplaint]);
 
   // Apply filters
-  const filteredComplaints = complaints.filter((c) => {
-    if (suspiciousOnly && (!c.isSuspicious || c.dismissedSuspiciousFlags)) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchRef = c.reference.toLowerCase().includes(q);
-      const matchTitle = c.title.toLowerCase().includes(q);
-      const matchResident = c.residentName.toLowerCase().includes(q);
-      if (!matchRef && !matchTitle && !matchResident) return false;
-    }
-    if (categoryFilter !== 'ALL' && c.category !== categoryFilter) return false;
-    if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
-    if (priorityFilter !== 'ALL' && c.priority !== priorityFilter) return false;
-    if (workerFilter !== 'ALL') {
-      if (workerFilter === 'UNASSIGNED') {
-        if (c.assignedWorkerId) return false;
-      } else if (c.assignedWorkerId !== workerFilter) {
-        return false;
+  const filteredComplaints = useMemo(() => {
+    return complaints.filter((c) => {
+      if (suspiciousOnly && (!c.isSuspicious || c.dismissedSuspiciousFlags)) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchRef = c.reference.toLowerCase().includes(q);
+        const matchDesc = c.description.toLowerCase().includes(q);
+        const matchCategory = c.category.toLowerCase().includes(q);
+        const matchResident = c.residentName.toLowerCase().includes(q);
+        const matchLocation = `${c.block} ${c.specificLocation || ''}`.toLowerCase().includes(q);
+        if (!matchRef && !matchDesc && !matchResident && !matchLocation && !matchCategory) return false;
       }
-    }
-    return true;
-  });
+      if (categoryFilter !== 'ALL' && c.category !== categoryFilter) return false;
+      if (statusFilter !== 'ALL' && c.status !== statusFilter) return false;
+      if (priorityFilter !== 'ALL' && c.priority !== priorityFilter) return false;
+      if (workerFilter !== 'ALL') {
+        if (workerFilter === 'UNASSIGNED') {
+          if (c.assignedWorkerId) return false;
+        } else if (c.assignedWorkerId !== workerFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [complaints, suspiciousOnly, searchQuery, categoryFilter, statusFilter, priorityFilter, workerFilter]);
+
+  // Apply sorting
+  const sortedComplaints = useMemo(() => {
+    return [...filteredComplaints].sort((a, b) => {
+      if (sortBy === 'date_desc') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      if (sortBy === 'date_asc') {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (sortBy === 'ref_asc') {
+        return a.reference.localeCompare(b.reference);
+      }
+      if (sortBy === 'priority_desc') {
+        const pWeights: Record<string, number> = { Urgent: 4, High: 3, Medium: 2, Low: 1 };
+        return (pWeights[b.priority] || 0) - (pWeights[a.priority] || 0);
+      }
+      return 0;
+    });
+  }, [filteredComplaints, sortBy]);
+
+  // Apply pagination
+  const totalPages = Math.max(1, Math.ceil(sortedComplaints.length / pageSize));
+  const paginatedComplaints = useMemo(() => {
+    const validPage = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (validPage - 1) * pageSize;
+    return sortedComplaints.slice(start, start + pageSize);
+  }, [sortedComplaints, currentPage, totalPages, pageSize]);
 
   // Action: Save Category & Priority changes
   const handleUpdateTriage = async () => {
@@ -722,7 +757,10 @@ export const ManagerComplaintsPage: React.FC = () => {
           {/* Worker Filter */}
           <select
             value={workerFilter}
-            onChange={(e) => setWorkerFilter(e.target.value)}
+            onChange={(e) => {
+              setWorkerFilter(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full text-xs px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none bg-white"
           >
             <option value="ALL">All Worker Allocations</option>
@@ -731,14 +769,32 @@ export const ManagerComplaintsPage: React.FC = () => {
               <option key={w.id} value={w.id}>{w.name} ({w.specialty})</option>
             ))}
           </select>
+
+          {/* Sort Selector */}
+          <select
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value as any);
+              setCurrentPage(1);
+            }}
+            className="w-full text-xs px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:outline-none bg-white"
+          >
+            <option value="date_desc">Newest First</option>
+            <option value="date_asc">Oldest First</option>
+            <option value="priority_desc">Highest Priority First</option>
+            <option value="ref_asc">Reference Code (A-Z)</option>
+          </select>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs text-slate-500">
           <div className="flex items-center gap-2.5">
-            <span>Showing {filteredComplaints.length} of {complaints.length} complaints</span>
+            <span>Showing {sortedComplaints.length} of {complaints.length} complaints</span>
             <button
               type="button"
-              onClick={() => setSuspiciousOnly(!suspiciousOnly)}
+              onClick={() => {
+                setSuspiciousOnly(!suspiciousOnly);
+                setCurrentPage(1);
+              }}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 suspiciousOnly
                   ? 'bg-red-700 text-white shadow-xs'
@@ -761,6 +817,7 @@ export const ManagerComplaintsPage: React.FC = () => {
                 setPriorityFilter('ALL');
                 setWorkerFilter('ALL');
                 setSuspiciousOnly(false);
+                setCurrentPage(1);
               }}
               className="text-teal-700 font-bold hover:underline text-[11px] cursor-pointer"
             >
@@ -771,7 +828,7 @@ export const ManagerComplaintsPage: React.FC = () => {
       </div>
 
       {/* Main Complaints List: Table on Desktop, Cards on Mobile */}
-      {filteredComplaints.length === 0 ? (
+      {sortedComplaints.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 shadow-xs">
           <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
           <div className="font-semibold text-slate-800 mb-1">No complaints match your criteria</div>
@@ -779,15 +836,15 @@ export const ManagerComplaintsPage: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Desktop Table View */}
+          {/* Desktop Table View - Redesigned without Issue Title column */}
           <div className="hidden lg:block bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
                   <th className="p-3.5">ID</th>
-                  <th className="p-3.5">Title & Category</th>
-                  <th className="p-3.5">Location</th>
+                  <th className="p-3.5">Category</th>
                   <th className="p-3.5">Resident</th>
+                  <th className="p-3.5">Flat / Location</th>
                   <th className="p-3.5">Priority</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5">Assigned Worker</th>
@@ -796,23 +853,11 @@ export const ManagerComplaintsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredComplaints.map((c) => (
+                {paginatedComplaints.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="p-3.5 font-mono font-bold text-slate-900">
                       <div className="space-y-1">
                         <span>{c.reference}</span>
-                        {c.source && (c.source === 'WhatsApp' || c.source === 'Mock WhatsApp') && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1.5 py-0.2 rounded w-fit">
-                              WhatsApp
-                            </span>
-                            {c.matchScore !== undefined && (
-                              <span className="text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1 py-0.2 rounded">
-                                {c.matchScore}%
-                              </span>
-                            )}
-                          </div>
-                        )}
                         {c.isSuspicious && !c.dismissedSuspiciousFlags && (
                           <div className="text-[9px] font-bold text-red-700 bg-red-100 border border-red-200 px-1.5 py-0.2 rounded w-fit flex items-center gap-1">
                             <AlertTriangle className="w-2.5 h-2.5" />
@@ -821,17 +866,18 @@ export const ManagerComplaintsPage: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="p-3.5 max-w-xs">
-                      <div className="font-bold text-slate-900 truncate">{c.title}</div>
-                      <div className="text-[11px] text-slate-500">{c.category}</div>
-                    </td>
                     <td className="p-3.5">
-                      <div className="font-medium text-slate-800">{c.block}</div>
-                      <div className="text-[11px] text-slate-400 truncate max-w-[120px]">{c.specificLocation}</div>
+                      <span className="font-semibold text-slate-800 px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
+                        {c.category}
+                      </span>
                     </td>
                     <td className="p-3.5">
                       <div className="font-semibold text-slate-900">{c.residentName}</div>
-                      <div className="text-[11px] text-slate-400">Flat {c.residentFlat}</div>
+                      {c.residentFlat && <div className="text-[11px] text-slate-400">Flat {c.residentFlat}</div>}
+                    </td>
+                    <td className="p-3.5">
+                      <div className="font-medium text-slate-800">{c.block}</div>
+                      <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{c.specificLocation}</div>
                     </td>
                     <td className="p-3.5">
                       <PriorityBadge priority={c.priority} />
@@ -873,7 +919,7 @@ export const ManagerComplaintsPage: React.FC = () => {
 
           {/* Mobile Cards View */}
           <div className="lg:hidden space-y-3">
-            {filteredComplaints.map((c) => (
+            {paginatedComplaints.map((c) => (
               <div
                 key={c.id}
                 onClick={() => handleOpenReview(c)}
@@ -892,7 +938,7 @@ export const ManagerComplaintsPage: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <h3 className="text-sm font-bold text-slate-900 mt-1">{c.title}</h3>
+                    <div className="text-xs font-bold text-slate-900 mt-1">{c.residentName} ({c.block} {c.residentFlat ? `• Flat ${c.residentFlat}` : ''})</div>
                   </div>
                   <StatusBadge status={c.status} size="sm" />
                 </div>
@@ -900,7 +946,7 @@ export const ManagerComplaintsPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 pt-1 border-t border-slate-100">
                   <div>
                     <span className="text-[10px] text-slate-400 block uppercase">Category</span>
-                    <span className="font-medium">{c.category}</span>
+                    <span className="font-medium text-slate-800">{c.category}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block uppercase">Priority</span>
@@ -908,11 +954,11 @@ export const ManagerComplaintsPage: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block uppercase">Location</span>
-                    <span className="font-medium">{c.block}</span>
+                    <span className="font-medium truncate block">{c.block} {c.specificLocation ? `• ${c.specificLocation}` : ''}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block uppercase">Worker</span>
-                    <span className="font-medium text-slate-800">
+                    <span className="font-medium text-slate-800 truncate block">
                       {c.assignedWorkerName || 'Unassigned'}
                     </span>
                   </div>
@@ -923,13 +969,57 @@ export const ManagerComplaintsPage: React.FC = () => {
                     {new Date(c.createdAt).toLocaleDateString()}
                   </span>
                   <span className="text-teal-800 font-bold text-xs flex items-center gap-1">
-                    <span>Review</span>
+                    <span>Review Details</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3 flex items-center justify-between shadow-2xs text-xs">
+              <span className="text-slate-500 text-[11px]">
+                Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong> ({sortedComplaints.length} total)
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  &larr; Prev
+                </button>
+
+                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pg) => (
+                  <button
+                    key={pg}
+                    type="button"
+                    onClick={() => setCurrentPage(pg)}
+                    className={`w-7 h-7 rounded-lg font-bold text-xs transition-colors ${
+                      currentPage === pg
+                        ? 'bg-teal-800 text-white'
+                        : 'border border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    {pg}
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next &rarr;
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
