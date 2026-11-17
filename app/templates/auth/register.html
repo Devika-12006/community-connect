@@ -161,29 +161,11 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   }
 
-  nameInput.addEventListener('input', function () {
-    if (nameError.style.display === 'block') {
-      validateName();
-    }
-  });
+  nameInput.addEventListener('input', validateName);
+  nameInput.addEventListener('blur', validateName);
 
-  nameInput.addEventListener('blur', function () {
-    if (nameInput.value.trim().length > 0) {
-      validateName();
-    }
-  });
-
-  flatInput.addEventListener('input', function () {
-    if (flatError.style.display === 'block') {
-      validateFlat();
-    }
-  });
-
-  flatInput.addEventListener('blur', function () {
-    if (flatInput.value.trim().length > 0) {
-      validateFlat();
-    }
-  });
+  flatInput.addEventListener('input', validateFlat);
+  flatInput.addEventListener('blur', validateFlat);
 
   form.addEventListener('submit', function (e) {
     const isNameValid = validateName();

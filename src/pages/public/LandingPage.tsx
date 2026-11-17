@@ -120,19 +120,33 @@ export const LandingPage: React.FC = () => {
   const handleRegNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setRegName(val);
-    if (regNameError) {
-      const check = validateResidentName(val);
-      if (check.valid) {
-        setRegNameError(null);
-      }
+
+    if (val.length === 0) {
+      setRegNameError(null);
+      return;
     }
+
+    if (val.length > 30) {
+      setRegNameError('Name cannot exceed 30 characters.');
+      return;
+    }
+
+    if (!/^[A-Za-z ]+$/.test(val)) {
+      setRegNameError('Name must contain only English alphabets (A–Z, a–z) and spaces. Numbers and special characters are not allowed.');
+      return;
+    }
+
+    setRegNameError(null);
   };
 
   const handleRegNameBlur = () => {
-    if (regName.trim().length > 0) {
+    const trimmed = regName.trim();
+    if (trimmed.length === 0) {
+      setRegNameError('Name is mandatory.');
+    } else {
       const check = validateResidentName(regName);
       if (!check.valid) {
-        setRegNameError(check.error || 'Name must contain only English alphabets and spaces (max 30 characters).');
+        setRegNameError(check.error || 'Name must contain only English alphabets and spaces.');
       } else {
         setRegNameError(null);
       }
@@ -142,19 +156,38 @@ export const LandingPage: React.FC = () => {
   const handleRegFlatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setRegFlat(val);
-    if (regFlatError) {
-      const check = validateFlatNumber(val);
-      if (check.valid) {
-        setRegFlatError(null);
-      }
+
+    if (val.length === 0) {
+      setRegFlatError(null);
+      return;
     }
+
+    if (val.length > 10) {
+      setRegFlatError('Flat number cannot exceed 10 characters.');
+      return;
+    }
+
+    if (/\s/.test(val)) {
+      setRegFlatError('Spaces are not allowed. Only letters, numbers, hyphens (-), and forward slashes (/) are accepted. Examples: A-203, B/102, 1204.');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9/-]+$/.test(val)) {
+      setRegFlatError('Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/). Examples: A-203, B/102, 1204.');
+      return;
+    }
+
+    setRegFlatError(null);
   };
 
   const handleRegFlatBlur = () => {
-    if (regFlat.trim().length > 0) {
+    const trimmed = regFlat.trim();
+    if (trimmed.length === 0) {
+      setRegFlatError('Flat number is mandatory.');
+    } else {
       const check = validateFlatNumber(regFlat);
       if (!check.valid) {
-        setRegFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+        setRegFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/).');
       } else {
         setRegFlatError(null);
       }
@@ -290,19 +323,33 @@ export const LandingPage: React.FC = () => {
   const handleResNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setResName(val);
-    if (resNameError) {
-      const check = validateResidentName(val);
-      if (check.valid) {
-        setResNameError(null);
-      }
+
+    if (val.length === 0) {
+      setResNameError(null);
+      return;
     }
+
+    if (val.length > 30) {
+      setResNameError('Name cannot exceed 30 characters.');
+      return;
+    }
+
+    if (!/^[A-Za-z ]+$/.test(val)) {
+      setResNameError('Name must contain only English alphabets (A–Z, a–z) and spaces. Numbers and special characters are not allowed.');
+      return;
+    }
+
+    setResNameError(null);
   };
 
   const handleResNameBlur = () => {
-    if (resName.trim().length > 0) {
+    const trimmed = resName.trim();
+    if (trimmed.length === 0) {
+      setResNameError('Name is mandatory.');
+    } else {
       const check = validateResidentName(resName);
       if (!check.valid) {
-        setResNameError(check.error || 'Name must contain only English alphabets and spaces (max 30 characters).');
+        setResNameError(check.error || 'Name must contain only English alphabets and spaces.');
       } else {
         setResNameError(null);
       }
@@ -312,19 +359,38 @@ export const LandingPage: React.FC = () => {
   const handleResFlatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setResFlat(val);
-    if (resFlatError) {
-      const check = validateFlatNumber(val);
-      if (check.valid) {
-        setResFlatError(null);
-      }
+
+    if (val.length === 0) {
+      setResFlatError(null);
+      return;
     }
+
+    if (val.length > 10) {
+      setResFlatError('Flat number cannot exceed 10 characters.');
+      return;
+    }
+
+    if (/\s/.test(val)) {
+      setResFlatError('Spaces are not allowed. Only letters, numbers, hyphens (-), and forward slashes (/) are accepted. Examples: A-203, B/102, 1204.');
+      return;
+    }
+
+    if (!/^[A-Za-z0-9/-]+$/.test(val)) {
+      setResFlatError('Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/). Examples: A-203, B/102, 1204.');
+      return;
+    }
+
+    setResFlatError(null);
   };
 
   const handleResFlatBlur = () => {
-    if (resFlat.trim().length > 0) {
+    const trimmed = resFlat.trim();
+    if (trimmed.length === 0) {
+      setResFlatError('Flat number is mandatory.');
+    } else {
       const check = validateFlatNumber(resFlat);
       if (!check.valid) {
-        setResFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+        setResFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/).');
       } else {
         setResFlatError(null);
       }
@@ -782,7 +848,7 @@ export const LandingPage: React.FC = () => {
 
           {/* TAB 2: Resident Registration */}
           {authTab === 'register' && (
-            <form onSubmit={handleResidentRegistration} className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+            <form noValidate onSubmit={handleResidentRegistration} className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
               <p className="text-slate-600 text-xs">
                 Register as a new community resident. Password hashing (SHA-256 with salt) and complexity rules are enforced.
               </p>
@@ -1191,7 +1257,7 @@ export const LandingPage: React.FC = () => {
         title="Setup Resident Profile"
         maxWidth="sm"
       >
-        <form onSubmit={handleResidentSubmit} className="space-y-3.5">
+        <form noValidate onSubmit={handleResidentSubmit} className="space-y-3.5">
           <p className="text-xs text-slate-600">
             Create a quick local resident profile to submit and track complaints.
           </p>
