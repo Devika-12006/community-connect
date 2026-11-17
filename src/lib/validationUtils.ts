@@ -10,69 +10,77 @@ export interface ValidationResult {
 }
 
 /**
- * Validates complete first, middle, last, and multi-part names.
- * Supports Unicode, Indian-language scripts (Devanagari, Telugu, Tamil, Malayalam, Bengali, etc.),
- * periods for initials, hyphens, and apostrophes.
- * Rejects empty input, purely numerical/special characters, and inappropriate markup.
+ * Validates resident name according to community standards.
+ * Requirements:
+ * - Mandatory field.
+ * - Allow a maximum of 30 characters.
+ * - Accept only English alphabets (A–Z, a–z) and spaces.
+ * - Do not allow numbers or special characters.
+ * - Trims unnecessary spaces (leading, trailing, and collapses consecutive spaces).
  */
 export function validateResidentName(rawName: string | undefined | null): ValidationResult {
-  if (!rawName) {
-    return { valid: false, error: 'Resident name is required.' };
+  if (rawName === undefined || rawName === null) {
+    return { valid: false, error: 'Name is mandatory.' };
   }
 
-  const cleanName = rawName.trim();
-  if (cleanName.length < 2) {
-    return { valid: false, error: 'Name must be at least 2 characters long.' };
+  // Trim unnecessary spaces (leading, trailing)
+  const trimmed = rawName.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, error: 'Name is mandatory.' };
   }
 
-  if (cleanName.length > 120) {
-    return { valid: false, error: 'Name cannot exceed 120 characters.' };
+  if (trimmed.length > 30) {
+    return { valid: false, error: 'Name cannot exceed 30 characters.' };
   }
 
-  // Unicode letter & mark matching with spaces, dots, hyphens, and apostrophes
-  // \p{L} matches any Unicode letter, \p{M} matches vowel/accent marks (e.g. in Indian scripts)
-  const unicodeNameRegex = /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]{0,118}[\p{L}\p{M}.']$/u;
-
-  if (!unicodeNameRegex.test(cleanName)) {
+  // Accept only English alphabets (A–Z, a–z) and spaces. Numbers and special characters are not allowed.
+  const englishAlphaWithSpaces = /^[A-Za-z ]+$/;
+  if (!englishAlphaWithSpaces.test(trimmed)) {
     return {
       valid: false,
-      error: 'Please enter a valid name containing letters, initials, or legitimate name punctuation.',
+      error: 'Name must contain only English alphabets and spaces. Numbers and special characters are not allowed.',
     };
   }
 
-  // Reject script or html tags
-  if (/<[^>]*>/i.test(cleanName)) {
-    return { valid: false, error: 'Name contains invalid characters.' };
+  // Clean value collapses multiple consecutive spaces to a single space
+  const cleanName = trimmed.replace(/\s+/g, ' ');
+  if (cleanName.length > 30) {
+    return { valid: false, error: 'Name cannot exceed 30 characters.' };
   }
 
   return { valid: true, cleanValue: cleanName };
 }
 
 /**
- * Validates flat, apartment, villa, and unit identifiers.
- * Supports multiple buildings, blocks, wings, floors, and flat formats:
- * e.g. "402", "B-204", "Tower A - 402", "Wing C - 12B", "Villa 14", "Flat 104, 1st Floor", "Penthouse 1"
+ * Validates flat / unit number.
+ * Requirements:
+ * - Mandatory field.
+ * - Allow a maximum of 10 characters.
+ * - Accept only letters, numbers, hyphens (-), and forward slashes (/).
+ *   Examples: A-203, B/102, 1204.
+ * - Do not allow other special characters or spaces.
  */
 export function validateFlatNumber(rawFlat: string | undefined | null): ValidationResult {
-  if (!rawFlat) {
-    return { valid: false, error: 'Flat or unit number is required.' };
+  if (rawFlat === undefined || rawFlat === null) {
+    return { valid: false, error: 'Flat number is mandatory.' };
   }
 
   const cleanFlat = rawFlat.trim();
-  if (cleanFlat.length < 1) {
-    return { valid: false, error: 'Flat or unit number cannot be empty.' };
+  if (cleanFlat.length === 0) {
+    return { valid: false, error: 'Flat number is mandatory.' };
   }
 
-  if (cleanFlat.length > 50) {
-    return { valid: false, error: 'Flat number cannot exceed 50 characters.' };
+  if (cleanFlat.length > 10) {
+    return { valid: false, error: 'Flat number cannot exceed 10 characters.' };
   }
 
-  // Flexible pattern supporting alphanumeric, hyphens, slashes, commas, and common unit punctuation
-  const flatRegex = /^[a-zA-Z0-9\s/.,#-]{1,50}$/;
+  // Accept only letters, numbers, hyphens (-), and forward slashes (/).
+  // No spaces or other special characters allowed.
+  const flatRegex = /^[A-Za-z0-9/-]+$/;
   if (!flatRegex.test(cleanFlat)) {
     return {
       valid: false,
-      error: 'Please enter a valid flat or unit number (letters, numbers, hyphens, or slashes).',
+      error: 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/). Spaces and other special characters are not allowed.',
     };
   }
 

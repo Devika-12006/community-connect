@@ -50,6 +50,8 @@ export const LandingPage: React.FC = () => {
   const [resFlat, setResFlat] = useState('');
   const [resType, setResType] = useState<'Owner' | 'Tenant' | 'Family Member'>('Owner');
   const [setupError, setSetupError] = useState('');
+  const [resNameError, setResNameError] = useState<string | null>(null);
+  const [resFlatError, setResFlatError] = useState<string | null>(null);
 
   // Enhanced Authentication System
   const [authTab, setAuthTab] = useState<'credentials' | 'register' | 'demo'>('credentials');
@@ -71,6 +73,8 @@ export const LandingPage: React.FC = () => {
   const [regResidentType, setRegResidentType] = useState<'Owner' | 'Tenant' | 'Family Member'>('Owner');
   const [regPhone, setRegPhone] = useState('');
   const [regError, setRegError] = useState<string | null>(null);
+  const [regNameError, setRegNameError] = useState<string | null>(null);
+  const [regFlatError, setRegFlatError] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
 
   // Password Reset State
@@ -113,19 +117,73 @@ export const LandingPage: React.FC = () => {
     }
   };
 
+  const handleRegNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRegName(val);
+    if (regNameError) {
+      const check = validateResidentName(val);
+      if (check.valid) {
+        setRegNameError(null);
+      }
+    }
+  };
+
+  const handleRegNameBlur = () => {
+    if (regName.trim().length > 0) {
+      const check = validateResidentName(regName);
+      if (!check.valid) {
+        setRegNameError(check.error || 'Name must contain only English alphabets and spaces (max 30 characters).');
+      } else {
+        setRegNameError(null);
+      }
+    }
+  };
+
+  const handleRegFlatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRegFlat(val);
+    if (regFlatError) {
+      const check = validateFlatNumber(val);
+      if (check.valid) {
+        setRegFlatError(null);
+      }
+    }
+  };
+
+  const handleRegFlatBlur = () => {
+    if (regFlat.trim().length > 0) {
+      const check = validateFlatNumber(regFlat);
+      if (!check.valid) {
+        setRegFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+      } else {
+        setRegFlatError(null);
+      }
+    }
+  };
+
   const handleResidentRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError(null);
 
     const nameCheck = validateResidentName(regName);
+    const flatCheck = validateFlatNumber(regFlat);
+
+    let hasValidationError = false;
     if (!nameCheck.valid) {
-      setRegError(nameCheck.error || 'Please enter a valid full name.');
-      return;
+      setRegNameError(nameCheck.error || 'Name is mandatory and must contain only English alphabets and spaces (max 30 characters).');
+      hasValidationError = true;
+    } else {
+      setRegNameError(null);
     }
 
-    const flatCheck = validateFlatNumber(regFlat);
     if (!flatCheck.valid) {
-      setRegError(flatCheck.error || 'Please enter a valid flat number.');
+      setRegFlatError(flatCheck.error || 'Flat number is mandatory and can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+      hasValidationError = true;
+    } else {
+      setRegFlatError(null);
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -229,17 +287,72 @@ export const LandingPage: React.FC = () => {
     }
   };
 
+  const handleResNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setResName(val);
+    if (resNameError) {
+      const check = validateResidentName(val);
+      if (check.valid) {
+        setResNameError(null);
+      }
+    }
+  };
+
+  const handleResNameBlur = () => {
+    if (resName.trim().length > 0) {
+      const check = validateResidentName(resName);
+      if (!check.valid) {
+        setResNameError(check.error || 'Name must contain only English alphabets and spaces (max 30 characters).');
+      } else {
+        setResNameError(null);
+      }
+    }
+  };
+
+  const handleResFlatChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setResFlat(val);
+    if (resFlatError) {
+      const check = validateFlatNumber(val);
+      if (check.valid) {
+        setResFlatError(null);
+      }
+    }
+  };
+
+  const handleResFlatBlur = () => {
+    if (resFlat.trim().length > 0) {
+      const check = validateFlatNumber(resFlat);
+      if (!check.valid) {
+        setResFlatError(check.error || 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+      } else {
+        setResFlatError(null);
+      }
+    }
+  };
+
   const handleResidentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSetupError('');
     const nameCheck = validateResidentName(resName);
-    if (!nameCheck.valid) {
-      setSetupError(nameCheck.error || 'Please enter a valid full name.');
-      return;
-    }
     const flatCheck = validateFlatNumber(resFlat);
+
+    let hasError = false;
+    if (!nameCheck.valid) {
+      setResNameError(nameCheck.error || 'Name is mandatory and must contain only English alphabets and spaces (max 30 characters).');
+      hasError = true;
+    } else {
+      setResNameError(null);
+    }
+
     if (!flatCheck.valid) {
-      setSetupError(flatCheck.error || 'Please enter a valid flat number.');
+      setResFlatError(flatCheck.error || 'Flat number is mandatory and can only contain letters, numbers, hyphens (-), and forward slashes (/) without spaces (max 10 characters).');
+      hasError = true;
+    } else {
+      setResFlatError(null);
+    }
+
+    if (hasError) {
       return;
     }
 
@@ -689,11 +802,23 @@ export const LandingPage: React.FC = () => {
                   <input
                     type="text"
                     value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
+                    maxLength={30}
+                    onChange={handleRegNameChange}
+                    onBlur={handleRegNameBlur}
                     placeholder="e.g. Priya Sharma"
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    className={`w-full text-xs px-3 py-2 border rounded-lg focus:ring-1 focus:outline-none ${
+                      regNameError
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-400'
+                        : 'border-slate-300 focus:ring-teal-700 focus:border-teal-700'
+                    }`}
                     required
                   />
+                  {regNameError && (
+                    <p className="mt-1 text-[11px] text-red-600 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{regNameError}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -748,11 +873,23 @@ export const LandingPage: React.FC = () => {
                   <input
                     type="text"
                     value={regFlat}
-                    onChange={(e) => setRegFlat(e.target.value)}
-                    placeholder="e.g. 504, B-204, Wing C-12B"
-                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                    maxLength={10}
+                    onChange={handleRegFlatChange}
+                    onBlur={handleRegFlatBlur}
+                    placeholder="e.g. A-203, B/102, 1204"
+                    className={`w-full text-xs px-3 py-2 border rounded-lg focus:ring-1 focus:outline-none ${
+                      regFlatError
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-400'
+                        : 'border-slate-300 focus:ring-teal-700 focus:border-teal-700'
+                    }`}
                     required
                   />
+                  {regFlatError && (
+                    <p className="mt-1 text-[11px] text-red-600 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{regFlatError}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1066,15 +1203,30 @@ export const LandingPage: React.FC = () => {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Your Name</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Your Name <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
               value={resName}
-              onChange={(e) => setResName(e.target.value)}
+              maxLength={30}
+              onChange={handleResNameChange}
+              onBlur={handleResNameBlur}
               placeholder="e.g. John Doe"
-              className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+              className={`w-full text-xs px-3 py-2 border rounded-lg focus:ring-1 focus:outline-none ${
+                resNameError
+                  ? 'border-red-400 focus:border-red-500 focus:ring-red-400'
+                  : 'border-slate-300 focus:ring-teal-700 focus:border-teal-700'
+              }`}
+              required
               autoFocus
             />
+            {resNameError && (
+              <p className="mt-1 text-[11px] text-red-600 font-medium flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{resNameError}</span>
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -1091,14 +1243,29 @@ export const LandingPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Flat / Unit</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Flat / Unit <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 value={resFlat}
-                onChange={(e) => setResFlat(e.target.value)}
-                placeholder="e.g. 302, B-204"
-                className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-700 focus:outline-none"
+                maxLength={10}
+                onChange={handleResFlatChange}
+                onBlur={handleResFlatBlur}
+                placeholder="e.g. A-203, B/102, 1204"
+                className={`w-full text-xs px-3 py-2 border rounded-lg focus:ring-1 focus:outline-none ${
+                  resFlatError
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-400'
+                    : 'border-slate-300 focus:ring-teal-700 focus:border-teal-700'
+                }`}
+                required
               />
+              {resFlatError && (
+                <p className="mt-1 text-[11px] text-red-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{resFlatError}</span>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Role</label>

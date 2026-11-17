@@ -8,70 +8,96 @@ import { createCaptureSession, validateAndConsumeSession } from '../services/cap
 import type { GeoLocationData } from '../types';
 
 describe('Resident Name Validation (validateResidentName)', () => {
-  it('accepts standard Indian names with initials and multi-part words', () => {
-    expect(validateResidentName('Devika R. Nair').valid).toBe(true);
-    expect(validateResidentName('A. P. J. Abdul Kalam').valid).toBe(true);
-    expect(validateResidentName('K. V. Ramanathan').valid).toBe(true);
-    expect(validateResidentName('Mary-Ann D\'Souza').valid).toBe(true);
-    expect(validateResidentName('Suresh Kumar Verma').valid).toBe(true);
+  it('accepts valid English names with spaces up to 30 characters', () => {
+    expect(validateResidentName('Devika Nair').valid).toBe(true);
+    expect(validateResidentName('Priya Sharma').valid).toBe(true);
+    expect(validateResidentName('John Doe').valid).toBe(true);
+    expect(validateResidentName('Alexander Pierce').valid).toBe(true);
+    expect(validateResidentName('A').valid).toBe(true);
+    // Exactly 30 characters
+    expect(validateResidentName('Abcdefghij Abcdefghij Abcdefgh').valid).toBe(true);
   });
 
-  it('accepts names in Indian regional Unicode scripts', () => {
-    // Hindi / Devanagari
-    expect(validateResidentName('राजेश शर्मा').valid).toBe(true);
-    // Telugu
-    expect(validateResidentName('వెంకట్ రావు').valid).toBe(true);
-    // Tamil
-    expect(validateResidentName('கார்த்திக் ராஜா').valid).toBe(true);
-    // Malayalam
-    expect(validateResidentName('അനന്യ കൃഷ്ണൻ').valid).toBe(true);
+  it('trims unnecessary leading, trailing, and multiple spaces before saving', () => {
+    const res1 = validateResidentName('   Sunil Sharma   ');
+    expect(res1.valid).toBe(true);
+    expect(res1.cleanValue).toBe('Sunil Sharma');
+
+    const res2 = validateResidentName('Devika    Nair');
+    expect(res2.valid).toBe(true);
+    expect(res2.cleanValue).toBe('Devika Nair');
   });
 
-  it('trims leading and trailing whitespace automatically', () => {
-    const res = validateResidentName('   Sunil Sharma   ');
-    expect(res.valid).toBe(true);
-    expect(res.cleanValue).toBe('Sunil Sharma');
-  });
-
-  it('rejects empty or whitespace-only names', () => {
+  it('rejects empty or whitespace-only names as mandatory field', () => {
     expect(validateResidentName('').valid).toBe(false);
+    expect(validateResidentName('').error).toContain('mandatory');
     expect(validateResidentName('   ').valid).toBe(false);
+    expect(validateResidentName(null).valid).toBe(false);
+    expect(validateResidentName(undefined).valid).toBe(false);
   });
 
-  it('rejects single character or unreasonably short input', () => {
-    expect(validateResidentName('A').valid).toBe(false);
+  it('rejects names exceeding 30 characters', () => {
+    const over30 = 'A'.repeat(31);
+    const res = validateResidentName(over30);
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('30 characters');
   });
 
-  it('rejects names with numbers or script injection attempts', () => {
-    expect(validateResidentName('User123').valid).toBe(false);
+  it('rejects names containing numbers or special characters', () => {
+    expect(validateResidentName('Devika123').valid).toBe(false);
+    expect(validateResidentName('Mary-Ann').valid).toBe(false); // No hyphens
+    expect(validateResidentName('Devika R. Nair').valid).toBe(false); // No periods
+    expect(validateResidentName('Devika@home').valid).toBe(false);
     expect(validateResidentName('<script>alert(1)</script>').valid).toBe(false);
+    // Non-English letters
+    expect(validateResidentName('राजेश शर्मा').valid).toBe(false);
   });
 });
 
 describe('Flat Number Validation (validateFlatNumber)', () => {
-  it('accepts various building, block, wing, and floor formats', () => {
-    expect(validateFlatNumber('402').valid).toBe(true);
-    expect(validateFlatNumber('B-204').valid).toBe(true);
-    expect(validateFlatNumber('Tower A - 402').valid).toBe(true);
-    expect(validateFlatNumber('Wing C - 12B').valid).toBe(true);
-    expect(validateFlatNumber('Villa 14').valid).toBe(true);
-    expect(validateFlatNumber('Flat 104, 1st Floor').valid).toBe(true);
-    expect(validateFlatNumber('Penthouse 3').valid).toBe(true);
+  it('accepts letters, numbers, hyphens, and forward slashes up to 10 characters', () => {
+    // Prompt examples
+    expect(validateFlatNumber('A-203').valid).toBe(true);
+    expect(validateFlatNumber('B/102').valid).toBe(true);
+    expect(validateFlatNumber('1204').valid).toBe(true);
+
+    // Other valid formats
+    expect(validateFlatNumber('302').valid).toBe(true);
+    expect(validateFlatNumber('C-12/A').valid).toBe(true);
+    expect(validateFlatNumber('FLAT-1').valid).toBe(true);
+    // Exactly 10 characters
+    expect(validateFlatNumber('A123456789').valid).toBe(true);
+    expect(validateFlatNumber('AB-12/34-X').valid).toBe(true);
   });
 
   it('trims leading and trailing whitespace in flat numbers', () => {
-    const res = validateFlatNumber('   Tower B - 501   ');
+    const res = validateFlatNumber('   A-203   ');
     expect(res.valid).toBe(true);
-    expect(res.cleanValue).toBe('Tower B - 501');
+    expect(res.cleanValue).toBe('A-203');
   });
 
-  it('rejects empty or whitespace-only flat numbers', () => {
+  it('rejects empty or whitespace-only flat numbers as mandatory field', () => {
     expect(validateFlatNumber('').valid).toBe(false);
+    expect(validateFlatNumber('').error).toContain('mandatory');
     expect(validateFlatNumber('   ').valid).toBe(false);
+    expect(validateFlatNumber(null).valid).toBe(false);
+    expect(validateFlatNumber(undefined).valid).toBe(false);
   });
 
-  it('rejects excessively long or invalid string inputs', () => {
-    expect(validateFlatNumber('A'.repeat(60)).valid).toBe(false);
+  it('rejects flat numbers exceeding 10 characters', () => {
+    const over10 = '12345678901';
+    const res = validateFlatNumber(over10);
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('10 characters');
+  });
+
+  it('rejects spaces and other special characters in flat numbers', () => {
+    expect(validateFlatNumber('A 203').valid).toBe(false); // Spaces not allowed
+    expect(validateFlatNumber('Tower A - 402').valid).toBe(false); // Spaces not allowed
+    expect(validateFlatNumber('B#102').valid).toBe(false); // Hash not allowed
+    expect(validateFlatNumber('Flat.101').valid).toBe(false); // Period not allowed
+    expect(validateFlatNumber('A@203').valid).toBe(false); // @ not allowed
+    expect(validateFlatNumber('Villa, 14').valid).toBe(false); // Comma not allowed
   });
 });
 

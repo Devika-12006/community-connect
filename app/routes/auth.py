@@ -1,3 +1,4 @@
+import re
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from app import db
@@ -54,16 +55,56 @@ def register():
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        full_name = request.form.get('full_name', '').strip()
+        raw_full_name = request.form.get('full_name', '')
         username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
         building_block = request.form.get('building_block', '').strip()
-        flat_no = request.form.get('flat_no', '').strip()
+        raw_flat_no = request.form.get('flat_no', '')
         phone = request.form.get('phone', '').strip()
 
-        # Validations
+        # Trim unnecessary spaces from name (leading, trailing, and multiple spaces collapsed)
+        full_name = re.sub(r'\s+', ' ', raw_full_name).strip() if raw_full_name else ''
+        flat_no = raw_flat_no.strip() if raw_flat_no else ''
+
+        # 1. Full Name Validations (Mandatory, max 30 chars, English alphabets and spaces only)
+        name_error = None
+        if not full_name:
+            name_error = 'Full Name is mandatory.'
+        elif len(full_name) > 30:
+            name_error = 'Name cannot exceed 30 characters.'
+        elif not re.match(r'^[A-Za-z ]+$', full_name):
+            name_error = 'Name must contain only English alphabets (A–Z, a–z) and spaces. Numbers and special characters are not allowed.'
+
+        # 2. Flat Number Validations (Mandatory, max 10 chars, letters, numbers, hyphens, and slashes only)
+        flat_error = None
+        if not flat_no:
+            flat_error = 'Flat Number is mandatory.'
+        elif len(flat_no) > 10:
+            flat_error = 'Flat number cannot exceed 10 characters.'
+        elif not re.match(r'^[A-Za-z0-9/-]+$', flat_no):
+            flat_error = 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/). Spaces and other special characters are not allowed.'
+
+        if name_error:
+            flash(name_error, 'danger')
+        if flat_error:
+            flash(flat_error, 'danger')
+
+        if name_error or flat_error:
+            return render_template(
+                'auth/register.html',
+                name_error=name_error,
+                flat_error=flat_error,
+                full_name=raw_full_name,
+                username=username,
+                email=email,
+                building_block=building_block,
+                flat_no=raw_flat_no,
+                phone=phone
+            )
+
+        # Other Validations
         if not all([full_name, username, email, password, building_block, flat_no]):
             flash('Please fill in all mandatory fields.', 'warning')
             return render_template('auth/register.html')

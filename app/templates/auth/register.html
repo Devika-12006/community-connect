@@ -13,40 +13,64 @@
         <p class="text-muted small">Join your community maintenance network to report issues and track repairs</p>
       </div>
 
-      <form method="POST" action="{{ url_for('auth.register') }}">
+      <form id="residentRegisterForm" method="POST" action="{{ url_for('auth.register') }}" novalidate>
         <div class="row g-3">
           <div class="col-md-6">
             <label for="full_name" class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="full_name" name="full_name" required placeholder="e.g. Devika Sharma">
+            <input
+              type="text"
+              class="form-control {% if name_error %}is-invalid{% endif %}"
+              id="full_name"
+              name="full_name"
+              maxlength="30"
+              required
+              placeholder="e.g. Devika Sharma"
+              value="{{ full_name or request.form.get('full_name', '') }}"
+            >
+            <div id="full_name_error" class="text-danger small mt-1" {% if not name_error %}style="display: none;"{% endif %}>
+              {{ name_error or '' }}
+            </div>
           </div>
           <div class="col-md-6">
             <label for="username" class="form-label fw-semibold">Choose Username <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="username" name="username" required placeholder="e.g. devika_302">
+            <input type="text" class="form-control" id="username" name="username" required placeholder="e.g. devika_302" value="{{ username or request.form.get('username', '') }}">
           </div>
 
           <div class="col-md-6">
             <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
-            <input type="email" class="form-control" id="email" name="email" required placeholder="e.g. devika@example.com">
+            <input type="email" class="form-control" id="email" name="email" required placeholder="e.g. devika@example.com" value="{{ email or request.form.get('email', '') }}">
           </div>
           <div class="col-md-6">
             <label for="phone" class="form-label fw-semibold">Phone Number</label>
-            <input type="tel" class="form-control" id="phone" name="phone" placeholder="e.g. +91 98765 43210">
+            <input type="tel" class="form-control" id="phone" name="phone" placeholder="e.g. +91 98765 43210" value="{{ phone or request.form.get('phone', '') }}">
           </div>
 
           <div class="col-md-6">
             <label for="building_block" class="form-label fw-semibold">Building / Block <span class="text-danger">*</span></label>
             <select class="form-select" id="building_block" name="building_block" required>
-              <option value="" disabled selected>Select your block</option>
-              <option value="Block A">Block A</option>
-              <option value="Block B">Block B</option>
-              <option value="Block C">Block C</option>
-              <option value="Block D">Block D</option>
-              <option value="Clubhouse & Amenities">Clubhouse & Amenities</option>
+              <option value="" disabled {% if not building_block %}selected{% endif %}>Select your block</option>
+              <option value="Block A" {% if building_block == 'Block A' %}selected{% endif %}>Block A</option>
+              <option value="Block B" {% if building_block == 'Block B' %}selected{% endif %}>Block B</option>
+              <option value="Block C" {% if building_block == 'Block C' %}selected{% endif %}>Block C</option>
+              <option value="Block D" {% if building_block == 'Block D' %}selected{% endif %}>Block D</option>
+              <option value="Clubhouse & Amenities" {% if building_block == 'Clubhouse & Amenities' %}selected{% endif %}>Clubhouse & Amenities</option>
             </select>
           </div>
           <div class="col-md-6">
             <label for="flat_no" class="form-label fw-semibold">Flat / Unit Number <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="flat_no" name="flat_no" required placeholder="e.g. 302 or Penthouse 1">
+            <input
+              type="text"
+              class="form-control {% if flat_error %}is-invalid{% endif %}"
+              id="flat_no"
+              name="flat_no"
+              maxlength="10"
+              required
+              placeholder="e.g. A-203, B/102, 1204"
+              value="{{ flat_no or request.form.get('flat_no', '') }}"
+            >
+            <div id="flat_no_error" class="text-danger small mt-1" {% if not flat_error %}style="display: none;"{% endif %}>
+              {{ flat_error or '' }}
+            </div>
           </div>
 
           <div class="col-md-6">
@@ -72,4 +96,114 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const form = document.getElementById('residentRegisterForm');
+  const nameInput = document.getElementById('full_name');
+  const nameError = document.getElementById('full_name_error');
+  const flatInput = document.getElementById('flat_no');
+  const flatError = document.getElementById('flat_no_error');
+
+  function validateName() {
+    const raw = nameInput.value;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      nameError.textContent = 'Name is mandatory.';
+      nameError.style.display = 'block';
+      nameInput.classList.add('is-invalid');
+      return false;
+    }
+    if (trimmed.length > 30) {
+      nameError.textContent = 'Name cannot exceed 30 characters.';
+      nameError.style.display = 'block';
+      nameInput.classList.add('is-invalid');
+      return false;
+    }
+    const nameRegex = /^[A-Za-z ]+$/;
+    if (!nameRegex.test(trimmed)) {
+      nameError.textContent = 'Name must contain only English alphabets (A–Z, a–z) and spaces. Numbers and special characters are not allowed.';
+      nameError.style.display = 'block';
+      nameInput.classList.add('is-invalid');
+      return false;
+    }
+    nameError.style.display = 'none';
+    nameInput.classList.remove('is-invalid');
+    return true;
+  }
+
+  function validateFlat() {
+    const raw = flatInput.value;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      flatError.textContent = 'Flat number is mandatory.';
+      flatError.style.display = 'block';
+      flatInput.classList.add('is-invalid');
+      return false;
+    }
+    if (trimmed.length > 10) {
+      flatError.textContent = 'Flat number cannot exceed 10 characters.';
+      flatError.style.display = 'block';
+      flatInput.classList.add('is-invalid');
+      return false;
+    }
+    const flatRegex = /^[A-Za-z0-9/-]+$/;
+    if (!flatRegex.test(trimmed)) {
+      flatError.textContent = 'Flat number can only contain letters, numbers, hyphens (-), and forward slashes (/). Spaces and other special characters are not allowed.';
+      flatError.style.display = 'block';
+      flatInput.classList.add('is-invalid');
+      return false;
+    }
+    flatError.style.display = 'none';
+    flatInput.classList.remove('is-invalid');
+    return true;
+  }
+
+  nameInput.addEventListener('input', function () {
+    if (nameError.style.display === 'block') {
+      validateName();
+    }
+  });
+
+  nameInput.addEventListener('blur', function () {
+    if (nameInput.value.trim().length > 0) {
+      validateName();
+    }
+  });
+
+  flatInput.addEventListener('input', function () {
+    if (flatError.style.display === 'block') {
+      validateFlat();
+    }
+  });
+
+  flatInput.addEventListener('blur', function () {
+    if (flatInput.value.trim().length > 0) {
+      validateFlat();
+    }
+  });
+
+  form.addEventListener('submit', function (e) {
+    const isNameValid = validateName();
+    const isFlatValid = validateFlat();
+
+    if (!isNameValid || !isFlatValid) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!isNameValid) {
+        nameInput.focus();
+      } else {
+        flatInput.focus();
+      }
+      return false;
+    }
+
+    // Trim unnecessary spaces before saving
+    nameInput.value = nameInput.value.replace(/\s+/g, ' ').trim();
+    flatInput.value = flatInput.value.trim();
+  });
+});
+</script>
 {% endblock %}
